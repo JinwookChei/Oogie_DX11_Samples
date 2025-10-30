@@ -418,6 +418,7 @@ void UpdateConstantResource(const Transform& worldTransform)
 	cb.world = DirectX::XMMatrixTranspose(world);
 	cb.view = DirectX::XMMatrixTranspose(view);
 	cb.projection = DirectX::XMMatrixTranspose(projection);
+
 	cb.lightColor = lightColor;
 	cb.ambientColor = ambientColor;
 	cb.spotPosition = spotPosition;

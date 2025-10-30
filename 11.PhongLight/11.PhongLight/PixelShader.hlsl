@@ -8,6 +8,8 @@ cbuffer CBTransform : register(b0)
     matrix cb_View;
     matrix cb_Projection;
     matrix cb_WorldInvTranspose;
+    
+    float4 cb_CamPos;
 };
 
 cbuffer CBLight : register(b1)
@@ -121,7 +123,6 @@ float3 UnpackNormal(float4 c)
 
 float4 main(PS_INPUT input) : SV_TARGET
 {
-    
     float3 normal = input.normal;
     float3 lightDir = -cb_LightDir;
     float nDotL = dot(normalize(normal), normalize(lightDir));
@@ -132,21 +133,22 @@ float4 main(PS_INPUT input) : SV_TARGET
     
     // Specular
     float3 reflecDir = normalize(2 * normal * nDotL - lightDir);
-    float3 viewDir;
-    viewDir.x = cb_View._13;
-    viewDir.y = cb_View._23;
-    viewDir.z = cb_View._33;
-    viewDir = -normalize(viewDir);
-    float rDotV = saturate(dot(reflecDir, viewDir));
+    float3 objectToEye = normalize(cb_CamPos.xyz - input.worldPos);
+    float rDotV = saturate(dot(reflecDir, objectToEye));
+    
     float adjShininess = pow(rDotV, cb_Shininess);
     float3 specularColor = adjShininess * cb_LightSpecular.rgb * cb_MaterialSpecular.rgb;
     
     // Ambient
     float3 ambientColor = cb_LightAmbient * cb_MaterialAmbient;
+    //float3 ambientColor = cb_LightAmbient * cb_MaterialDiffuse ;
     
     // Emissive
     float3 emissiveColor = cb_MaterialEmissive;
     
+    
     float4 finalColor = float4(diffuseColor, 1.0f) + float4(specularColor, 0.0f) + float4(ambientColor, 0.0f) + float4(emissiveColor, 0.0f);
+    
+    
     return finalColor;
 }

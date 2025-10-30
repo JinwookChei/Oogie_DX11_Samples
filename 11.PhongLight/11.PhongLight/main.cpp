@@ -67,6 +67,8 @@ struct CBTransform
 	DirectX::XMMATRIX view;
 	DirectX::XMMATRIX projection;
 	DirectX::XMMATRIX worldInvTranspose;
+
+	Float4 camPos;
 };
 
 struct CBLight
@@ -869,7 +871,8 @@ void UpdateConstantResource(const Transform& worldTransform)
 	// 월드, 뷰, 프로젝션 행렬 설정
 	// world는 오브젝트마다 고유의 값이며, 각각의 오브젝트의 Transform 을 적용해야함.
 	DirectX::XMMATRIX world = scale * rotation * position;
-	DirectX::XMMATRIX view = DirectX::XMMatrixLookToLH(DirectX::XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f), DirectX::XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f), DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f));
+	DirectX::XMVECTOR camPos = DirectX::XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
+	DirectX::XMMATRIX view = DirectX::XMMatrixLookToLH(camPos, DirectX::XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f), DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f));
 	DirectX::XMMATRIX projection = DirectX::XMMatrixPerspectiveFovLH(DirectX::XM_PIDIV4, ResolutionWidth / ResolutionHeigh, 0.01f, 100.0f);
 	DirectX::XMMATRIX worldInvTranspose = XMMatrixTranspose(XMMatrixInverse(nullptr, world));
 
@@ -879,10 +882,17 @@ void UpdateConstantResource(const Transform& worldTransform)
 	cbTransform.view = DirectX::XMMatrixTranspose(view);
 	cbTransform.projection = DirectX::XMMatrixTranspose(projection);
 	cbTransform.worldInvTranspose = XMMatrixTranspose(worldInvTranspose);
+	cbTransform.camPos =
+	{
+		DirectX::XMVectorGetX(camPos),
+		DirectX::XMVectorGetY(camPos),
+		DirectX::XMVectorGetZ(camPos),
+		DirectX::XMVectorGetW(camPos)
+	};
 
 	// 일반 빛 색상.
 	CBLight cbLight;
-	cbLight.lightAmbient = { 1.0f, 0.1f, 0.1f, 1.0f }; // 주변광 색상 (조명 없는 부분)
+	cbLight.lightAmbient = { 0.15f, 0.15f, 0.15f, 1.0f }; // 주변광 색상 (조명 없는 부분)
 	cbLight.lightDiffuse = { 1.0f, 1.0f, 1.0f, 1.0f }; // 확산광 색상
 	cbLight.lightSpecular = { 1.0f, 1.0f, 1.0f, 1.0f }; // 하이라이트 색상
 	cbLight.lightDir = { 0.0f, 0.0f, -1.0f };       // 광원 방향 (정규화)

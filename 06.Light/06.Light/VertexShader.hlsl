@@ -37,6 +37,7 @@ PS_INPUT main(VS_INPUT input)
     float4 worldPosition = mul(float4(input.position, 1.0f), World); // 월드 포지션 ( 원점을 기준으로 얼마만큼 떨어져있나 )
     float4 viewPosition = mul(worldPosition, View); // 뷰 포지션 ( 카메라를 기준으로 둔 포지션 ) ( 카메라 기준이란? 카메라의 포지션을 0, 0, 0 으로 본다 ) ( 카메라 기준이란? 카메라를 원점으로 만든다. )
     output.pos = mul(viewPosition, Projection);
+    
     output.color = input.color;
     
     float3x3 normalMatrix = (float3x3) World;

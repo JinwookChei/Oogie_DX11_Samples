@@ -4,6 +4,8 @@ cbuffer CBTransform : register(b0)
     matrix cb_View;
     matrix cb_Projection;
     matrix cb_WorldInvTranspose;
+    
+    float4 cb_CamPos;
 };
 
 struct VS_INPUT
