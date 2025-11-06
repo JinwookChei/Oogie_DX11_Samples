@@ -431,14 +431,23 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	wc.lpszClassName = L"WindowClass";
 	RegisterClassEx(&wc);
 
+	int width = 800;
+	int height = 600;
+
+	int centerScreenX = GetSystemMetrics(SM_CXSCREEN) / 2 - width / 2;
+	int centerScreenY = GetSystemMetrics(SM_CYSCREEN) / 2 - height / 2;
+
+
 	// 扩档快 积己
 	HWND hWnd = CreateWindowEx(
 		0,
 		L"WindowClass",
 		L"Direct3D 11 扩档快",
 		WS_OVERLAPPEDWINDOW,
-		100, 100,
-		800, 600,
+		//100, 100,
+		//800, 600,
+		centerScreenX, centerScreenY,
+		width, height,
 		nullptr,
 		nullptr,
 		hInstance,
