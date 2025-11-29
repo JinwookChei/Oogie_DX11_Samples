@@ -6,13 +6,14 @@
 #define	ResolutionHeigh 1440.0f
 
 #define USE_GPU_PARTICLES 1 // 0: CPU / 1: GPU
+#define GPU_PARTICLE_PATTERN_MODE 0 // 0: 폭발 1: 분수
 
 #if USE_GPU_PARTICLES
 ParticleSystemGPU* g_ParticleGPU = nullptr;
 #else
 ParticleSystemCPU* g_ParticleCPU = nullptr;
 #endif;
-
+ID3D11ShaderResourceView* g_ParticleTexSRV = nullptr;
 
 LARGE_INTEGER g_Freq;
 LARGE_INTEGER g_PrevTime;	
@@ -65,10 +66,17 @@ IDXGIAdapter* GetBestAdapter()
 
 HRESULT InitDeviceAndSwapChain(HWND hWnd, IDXGIAdapter* pBestAdapter)
 {
+	//UINT m4xMsaaQuality;
+	//HRESULT hr = g_pd3dDevice->CheckMultisampleQualityLevels(DXGI_FORMAT_R8G8B8A8_UNORM, 4, &m4xMsaaQuality);
+	//if (!(m4xMsaaQuality > 0))
+	//{
+	//	DEBUG_BREAK();
+	//}
+
 	// 스왑 체인 구조체를 초기화 해야 함
-	DXGI_SWAP_CHAIN_DESC sd;
-	memset(&sd, 0x00, sizeof(sd));
+	DXGI_SWAP_CHAIN_DESC sd = {};
 	sd.BufferCount = 1; // 백 버퍼의 수
+	//sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD; // 사용할려면 BufferCount 2로 올려야함.
 	sd.BufferDesc.Width = ResolutionWidth; // 백 버퍼의 너비
 	sd.BufferDesc.Height = ResolutionHeigh; // 백 버퍼의 높이
 	sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; // 백 버퍼의 포맷
@@ -76,22 +84,38 @@ HRESULT InitDeviceAndSwapChain(HWND hWnd, IDXGIAdapter* pBestAdapter)
 	sd.BufferDesc.RefreshRate.Denominator = 1; // 화면 새로 고침 빈도 ( 분모 )
 	sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT; // 백 버퍼의 용도
 	sd.OutputWindow = hWnd; // 렌더링 할 윈도우 핸들
-	sd.SampleDesc.Count = 1; // 멀티샘플링 수
+	sd.SampleDesc.Count = 1; // 멀티샘플링 수 // Count를 1로하고 Quality를 0으로하면 멀티 샘플링을 하지 않는다는 뜻
 	sd.SampleDesc.Quality = 0; // 멀티샘플링 품질
 	sd.Windowed = TRUE; // 창 모드 인지 아닌지.
+	sd.Flags = 0;
+
+	UINT createDeviceFlags = 0;
+#ifdef _DEBUG
+	createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
+
+	// 현재 하드웨어가 D3D 기능들을 어디까지 지원할수있을지 체크.
+	// 만약 지원하지 못한다면 D3D11CreateDeviceAndSwapChain에서 Fail이 발생.
+	D3D_FEATURE_LEVEL featureLevels[] =
+	{
+		D3D_FEATURE_LEVEL_11_0,
+		D3D_FEATURE_LEVEL_10_0
+	};
+
+	D3D_FEATURE_LEVEL featureLevel;
 
 	HRESULT hr = D3D11CreateDeviceAndSwapChain(
 		pBestAdapter,
-		D3D_DRIVER_TYPE_UNKNOWN,
+		D3D_DRIVER_TYPE_UNKNOWN,	 // 하드웨어(BestAdapter) 직접 선택 할 시 사용.
 		nullptr,
-		0,
-		nullptr,
-		0,
+		createDeviceFlags,
+		featureLevels,
+		2,
 		D3D11_SDK_VERSION,
 		&sd,
 		&g_pSwapChain,
 		&g_pd3dDevice,
-		nullptr,
+		&featureLevel,
 		&g_pImmediateContext
 	);
 
@@ -252,17 +276,17 @@ void BeginPlay()
 	QueryPerformanceCounter(&g_PrevTime);
 
 
-	ID3D11ShaderResourceView* particleTexSRV = CreateWhiteTextureSRV(g_pd3dDevice);
+	g_ParticleTexSRV = CreateWhiteTextureSRV(g_pd3dDevice);
 	const int maxParticles = 10000;
 
 #if USE_GPU_PARTICLES
 	g_ParticleGPU = new ParticleSystemGPU;
-	ParticleSystemGPU::gGpuPatternMode_ = 0;
-	if (false == g_ParticleGPU->Initialize(g_pd3dDevice, maxParticles, particleTexSRV))
+	ParticleSystemGPU::gGpuPatternMode_ = GPU_PARTICLE_PATTERN_MODE;
+	if (false == g_ParticleGPU->Initialize(g_pd3dDevice, maxParticles, g_ParticleTexSRV))
 	{
-		if (nullptr != particleTexSRV)
+		if (nullptr != g_ParticleTexSRV)
 		{
-			particleTexSRV->Release();
+			g_ParticleTexSRV->Release();
 		}
 
 		DEBUG_BREAK();
@@ -270,11 +294,11 @@ void BeginPlay()
 	}
 #else
 	g_ParticleCPU = new ParticleSystemCPU;
-	if (false == g_ParticleCPU->Initialize(g_pd3dDevice, maxParticles, particleTexSRV))
+	if (false == g_ParticleCPU->Initialize(g_pd3dDevice, maxParticles, g_ParticleTexSRV))
 	{
-		if (nullptr != particleTexSRV)
+		if (nullptr != g_ParticleTexSRV)
 		{
-			particleTexSRV->Release();
+			g_ParticleTexSRV->Release();
 		}
 
 		DEBUG_BREAK();
@@ -341,7 +365,7 @@ void Cleanup()
 #else
 	if (g_ParticleCPU) delete g_ParticleCPU; g_ParticleCPU = nullptr;
 #endif;
-
+	if (g_ParticleTexSRV) g_ParticleTexSRV->Release();
 	if (g_pImmediateContext) g_pImmediateContext->ClearState();
 	if (g_pDepthStencilView) g_pDepthStencilView->Release();
 	if (g_pRenderTargetView) g_pRenderTargetView->Release();
