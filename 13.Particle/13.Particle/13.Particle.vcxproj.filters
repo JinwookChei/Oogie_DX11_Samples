@@ -13,53 +13,83 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="CPU">
-      <UniqueIdentifier>{271bb3aa-c36f-42d0-9a24-9c58d7030d43}</UniqueIdentifier>
+    <Filter Include="Source Files\Math">
+      <UniqueIdentifier>{a13afb46-55f6-42f5-b5be-7c762ce6b863}</UniqueIdentifier>
     </Filter>
-    <Filter Include="GPU">
-      <UniqueIdentifier>{4e3e7144-bd66-4934-940c-e338faab8776}</UniqueIdentifier>
+    <Filter Include="Source Files\Math\Transform">
+      <UniqueIdentifier>{8665a3f0-733d-4dc1-9776-f47800c66b75}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Shader">
-      <UniqueIdentifier>{d120949c-0f02-40dc-b5aa-91bb4834e706}</UniqueIdentifier>
+    <Filter Include="PrecompiledHeader">
+      <UniqueIdentifier>{5b5c9402-c57c-402b-b287-f14316bb33f9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Math\VectorType">
+      <UniqueIdentifier>{648e9be2-be9e-4cd6-aab0-b2aa2907ddcf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\CPU">
+      <UniqueIdentifier>{cefe762a-0fa8-4be3-98f6-fcc12672487b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\GPU">
+      <UniqueIdentifier>{dee7b460-1d27-4ab0-891d-8274f85bab37}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Define">
+      <UniqueIdentifier>{72304d91-90a0-4ccb-a702-242613f3ec04}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Transform.cpp">
+      <Filter>Source Files\Math\Transform</Filter>
+    </ClCompile>
+    <ClCompile Include="VectorType.cpp">
+      <Filter>Source Files\Math\VectorType</Filter>
+    </ClCompile>
+    <ClCompile Include="stdafx.cpp">
+      <Filter>PrecompiledHeader</Filter>
+    </ClCompile>
     <ClCompile Include="ParticleSystemCPU.cpp">
-      <Filter>CPU</Filter>
+      <Filter>Source Files\CPU</Filter>
     </ClCompile>
     <ClCompile Include="ParticleSystemGPU.cpp">
-      <Filter>GPU</Filter>
+      <Filter>Source Files\GPU</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ParticleSystemCPU.h">
-      <Filter>CPU</Filter>
+    <ClInclude Include="Transform.h">
+      <Filter>Source Files\Math\Transform</Filter>
     </ClInclude>
-    <ClInclude Include="Defines.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="VectorType.h">
+      <Filter>Source Files\Math\VectorType</Filter>
+    </ClInclude>
+    <ClInclude Include="stdafx.h">
+      <Filter>PrecompiledHeader</Filter>
+    </ClInclude>
+    <ClInclude Include="ParticleSystemCPU.h">
+      <Filter>Source Files\CPU</Filter>
+    </ClInclude>
+    <ClInclude Include="Define.h">
+      <Filter>Source Files\Define</Filter>
     </ClInclude>
     <ClInclude Include="ParticleSystemGPU.h">
-      <Filter>GPU</Filter>
+      <Filter>Source Files\GPU</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="VertexShaderCPU.hlsl">
-      <Filter>Shader</Filter>
-    </FxCompile>
     <FxCompile Include="GeometryShader.hlsl">
-      <Filter>Shader</Filter>
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="VertexShaderCPU.hlsl">
+      <Filter>Resource Files</Filter>
     </FxCompile>
     <FxCompile Include="PixelShader.hlsl">
-      <Filter>Shader</Filter>
-    </FxCompile>
-    <FxCompile Include="VertexShaderGPU.hlsl">
-      <Filter>Shader</Filter>
+      <Filter>Resource Files</Filter>
     </FxCompile>
     <FxCompile Include="ComputeShader.hlsl">
-      <Filter>Shader</Filter>
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="VertexShaderGPU.hlsl">
+      <Filter>Resource Files</Filter>
     </FxCompile>
   </ItemGroup>
 </Project>

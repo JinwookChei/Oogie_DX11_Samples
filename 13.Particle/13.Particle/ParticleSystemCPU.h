@@ -26,6 +26,8 @@ public:
 	void Draw(ID3D11DeviceContext* ctx, const DirectX::XMMATRIX& viewProj, const DirectX::XMFLOAT3& cameraRight, const DirectX::XMFLOAT3& cameraUp);
 
 private:
+	void CleanUp();
+
 	int maxParticles_;
 	std::vector<ParticleCPU> particles_;
 	unsigned int aliveCount_;

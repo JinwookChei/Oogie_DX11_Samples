@@ -1,9 +1,4 @@
-#include <d3d11.h>
-#include <d3dcompiler.h>
-#include <DirectXMath.h>
-#include <vector>
-
-#include "Defines.h"
+#include "stdafx.h"
 #include "ParticleSystemCPU.h"
 
 static HRESULT LoadCSO(const wchar_t* filePath, ID3DBlob** ppBlob)
@@ -28,51 +23,7 @@ ParticleSystemCPU::ParticleSystemCPU()
 
 ParticleSystemCPU::~ParticleSystemCPU()
 {
-	if (vertexBuffer_)
-	{
-		vertexBuffer_->Release();
-		vertexBuffer_ = nullptr;
-	}
-	if (vertexShader_)
-	{
-		vertexShader_->Release();
-		vertexShader_ = nullptr;
-	}
-	if (geometryShader_)
-	{
-		geometryShader_->Release();
-		geometryShader_ = nullptr;
-	}
-	if (pixelShader_)
-	{
-		pixelShader_->Release();
-		pixelShader_ = nullptr;
-	}
-	if (inputLayout_)
-	{
-		inputLayout_->Release();
-		inputLayout_ = nullptr;
-	}
-	if (constantBuffer_)
-	{
-		constantBuffer_->Release();
-		constantBuffer_ = nullptr;
-	}
-	if (sampler_)
-	{
-		sampler_->Release();
-		sampler_ = nullptr;
-	}
-	if (blendState_)
-	{
-		blendState_->Release();
-		blendState_ = nullptr;
-	}
-	if (particleTexSRV_)
-	{
-		particleTexSRV_->Release();
-		particleTexSRV_ = nullptr;
-	}
+	CleanUp();
 }
 
 bool ParticleSystemCPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11ShaderResourceView* particleTex)
@@ -106,16 +57,16 @@ bool ParticleSystemCPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11
 	ID3DBlob* gsBlob = nullptr;
 	ID3DBlob* psBlob = nullptr;
 
-	if (FAILED(LoadCSO(L"..\\x64\\Debug\\VertexShaderCPU.cso", &vsBlob)))
+	if (FAILED(LoadCSO(L"VertexShaderCPU.cso", &vsBlob)))
 	{
 		return false;
 	}
-	if (FAILED(LoadCSO(L"..\\x64\\Debug\\GeometryShader.cso", &gsBlob)))
+	if (FAILED(LoadCSO(L"GeometryShader.cso", &gsBlob)))
 	{
 		vsBlob->Release();
 		return false;
 	}
-	if (FAILED(LoadCSO(L"..\\x64\\Debug\\PixelShader.cso", &psBlob)))
+	if (FAILED(LoadCSO(L"PixelShader.cso", &psBlob)))
 	{
 		vsBlob->Release();
 		gsBlob->Release();
@@ -326,4 +277,53 @@ void ParticleSystemCPU::Draw(ID3D11DeviceContext* ctx, const DirectX::XMMATRIX& 
 	ctx->Draw(aliveCount_, 0);
 
 	ctx->GSSetShader(nullptr, nullptr, 0);
+}
+
+void ParticleSystemCPU::CleanUp()
+{
+	if (vertexBuffer_)
+	{
+		vertexBuffer_->Release();
+		vertexBuffer_ = nullptr;
+	}
+	if (vertexShader_)
+	{
+		vertexShader_->Release();
+		vertexShader_ = nullptr;
+	}
+	if (geometryShader_)
+	{
+		geometryShader_->Release();
+		geometryShader_ = nullptr;
+	}
+	if (pixelShader_)
+	{
+		pixelShader_->Release();
+		pixelShader_ = nullptr;
+	}
+	if (inputLayout_)
+	{
+		inputLayout_->Release();
+		inputLayout_ = nullptr;
+	}
+	if (constantBuffer_)
+	{
+		constantBuffer_->Release();
+		constantBuffer_ = nullptr;
+	}
+	if (sampler_)
+	{
+		sampler_->Release();
+		sampler_ = nullptr;
+	}
+	if (blendState_)
+	{
+		blendState_->Release();
+		blendState_ = nullptr;
+	}
+	if (particleTexSRV_)
+	{
+		particleTexSRV_->Release();
+		particleTexSRV_ = nullptr;
+	}
 }

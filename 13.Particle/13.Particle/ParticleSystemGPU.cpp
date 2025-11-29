@@ -1,9 +1,4 @@
-#include <d3d11.h>
-#include <d3dcompiler.h>
-#include <DirectXMath.h>
-#include <vector>
-
-#include "Defines.h"
+#include "stdafx.h"
 #include "ParticleSystemGPU.h"
 
 static HRESULT LoadCSO(const wchar_t* filePath, ID3DBlob** ppBlob)
@@ -33,66 +28,7 @@ ParticleSystemGPU::ParticleSystemGPU()
 
 ParticleSystemGPU::~ParticleSystemGPU()
 {
-	if (particleBuffer_)
-	{
-		particleBuffer_->Release();
-		particleBuffer_ = nullptr;
-	}
-	if (particleSRV_)
-	{
-		particleSRV_->Release();
-		particleSRV_ = nullptr;
-	}
-	if (particleUAV_)
-	{
-		particleUAV_->Release();
-		particleUAV_ = nullptr;
-	}
-	if (vertexShader_)
-	{
-		vertexShader_->Release();
-		vertexShader_ = nullptr;
-	}
-	if (geometryShader_)
-	{
-		geometryShader_->Release();
-		geometryShader_ = nullptr;
-	}
-	if (pixelShader_)
-	{
-		pixelShader_->Release();
-		pixelShader_ = nullptr;
-	}
-	if (computeShader_)
-	{
-		computeShader_->Release();
-		computeShader_ = nullptr;
-	}
-	if (constantBuffer_)
-	{
-		constantBuffer_->Release();
-		constantBuffer_ = nullptr;
-	}
-	if (computeConstantBuffer_)
-	{
-		computeConstantBuffer_->Release();
-		computeConstantBuffer_ = nullptr;
-	}
-	if (sampler_)
-	{
-		sampler_->Release();
-		sampler_ = nullptr;
-	}
-	if (blendState_)
-	{
-		blendState_->Release();
-		blendState_ = nullptr;
-	}
-	if (particleTexSRV_)
-	{
-		particleTexSRV_->Release();
-		particleTexSRV_ = nullptr;
-	}
+	CleanUp();
 }
 
 bool ParticleSystemGPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11ShaderResourceView* particleTex)
@@ -123,6 +59,7 @@ bool ParticleSystemGPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11
 
 	if (FAILED(device->CreateBuffer(&bd, &srd, &particleBuffer_)))
 	{
+		DEBUG_BREAK();
 		return false;
 	}
 
@@ -134,6 +71,7 @@ bool ParticleSystemGPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11
 
 	if (FAILED(device->CreateShaderResourceView(particleBuffer_, &srvd, &particleSRV_)))
 	{
+		DEBUG_BREAK();
 		return false;
 	}
 
@@ -146,6 +84,7 @@ bool ParticleSystemGPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11
 
 	if (FAILED(device->CreateUnorderedAccessView(particleBuffer_, &uavd, &particleUAV_)))
 	{
+		DEBUG_BREAK();
 		return false;
 	}
 
@@ -154,23 +93,27 @@ bool ParticleSystemGPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11
 	ID3DBlob* psBlob = nullptr;
 	ID3DBlob* csBlob = nullptr;
 
-	if (FAILED(LoadCSO(L"..\\x64\\Debug\\VertexShaderGPU.cso", &vsBlob)))
+	if (FAILED(LoadCSO(L"VertexShaderGPU.cso", &vsBlob)))
 	{
+		DEBUG_BREAK();
 		return false;
 	}
-	if (FAILED(LoadCSO(L"..\\x64\\Debug\\GeometryShader.cso", &gsBlob)))
+	if (FAILED(LoadCSO(L"GeometryShader.cso", &gsBlob)))
 	{
+		DEBUG_BREAK();
 		vsBlob->Release();
 		return false;
 	}
-	if (FAILED(LoadCSO(L"..\\x64\\Debug\\PixelShader.cso", &psBlob)))
+	if (FAILED(LoadCSO(L"PixelShader.cso", &psBlob)))
 	{
+		DEBUG_BREAK();
 		vsBlob->Release();
 		gsBlob->Release();
 		return false;
 	}
-	if (FAILED(LoadCSO(L"..\\x64\\Debug\\ComputeShader.cso", &csBlob)))
+	if (FAILED(LoadCSO(L"ComputeShader.cso", &csBlob)))
 	{
+		DEBUG_BREAK();
 		vsBlob->Release();
 		gsBlob->Release();
 		psBlob->Release();
@@ -178,6 +121,7 @@ bool ParticleSystemGPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11
 	}
 	if (FAILED(device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &vertexShader_)))
 	{
+		DEBUG_BREAK();
 		vsBlob->Release();
 		gsBlob->Release();
 		psBlob->Release();
@@ -186,6 +130,7 @@ bool ParticleSystemGPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11
 	}
 	if (FAILED(device->CreateGeometryShader(gsBlob->GetBufferPointer(), gsBlob->GetBufferSize(), nullptr, &geometryShader_)))
 	{
+		DEBUG_BREAK();
 		vsBlob->Release();
 		gsBlob->Release();
 		psBlob->Release();
@@ -194,6 +139,7 @@ bool ParticleSystemGPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11
 	}
 	if (FAILED(device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &pixelShader_)))
 	{
+		DEBUG_BREAK();
 		vsBlob->Release();
 		gsBlob->Release();
 		psBlob->Release();
@@ -202,6 +148,7 @@ bool ParticleSystemGPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11
 	}
 	if (FAILED(device->CreateComputeShader(csBlob->GetBufferPointer(), csBlob->GetBufferSize(), nullptr, &computeShader_)))
 	{
+		DEBUG_BREAK();
 		vsBlob->Release();
 		gsBlob->Release();
 		psBlob->Release();
@@ -219,6 +166,7 @@ bool ParticleSystemGPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11
 	cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 	if (FAILED(device->CreateBuffer(&cbd, nullptr, &constantBuffer_)))
 	{
+		DEBUG_BREAK();
 		return false;
 	}
 
@@ -228,6 +176,7 @@ bool ParticleSystemGPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11
 	csbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 	if (FAILED(device->CreateBuffer(&csbd, nullptr, &computeConstantBuffer_)))
 	{
+		DEBUG_BREAK();
 		return false;
 	}
 
@@ -247,6 +196,7 @@ bool ParticleSystemGPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11
 
 	if (FAILED(device->CreateBlendState(&blendDesc, &blendState_)))
 	{
+		DEBUG_BREAK();
 		return false;
 	}
 
@@ -261,6 +211,7 @@ bool ParticleSystemGPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11
 
 	if (FAILED(device->CreateSamplerState(&samplerDesc, &sampler_)))
 	{
+		DEBUG_BREAK();
 		return false;
 	}
 
@@ -332,4 +283,69 @@ void ParticleSystemGPU::Draw(ID3D11DeviceContext* ctx, const DirectX::XMMATRIX& 
 
 	ID3D11ShaderResourceView* nullSRV[2] = { nullptr, nullptr };
 	ctx->VSSetShaderResources(1, 1, nullSRV);
+}
+
+
+void ParticleSystemGPU::CleanUp()
+{
+	if (particleBuffer_)
+	{
+		particleBuffer_->Release();
+		particleBuffer_ = nullptr;
+	}
+	if (particleSRV_)
+	{
+		particleSRV_->Release();
+		particleSRV_ = nullptr;
+	}
+	if (particleUAV_)
+	{
+		particleUAV_->Release();
+		particleUAV_ = nullptr;
+	}
+	if (vertexShader_)
+	{
+		vertexShader_->Release();
+		vertexShader_ = nullptr;
+	}
+	if (geometryShader_)
+	{
+		geometryShader_->Release();
+		geometryShader_ = nullptr;
+	}
+	if (pixelShader_)
+	{
+		pixelShader_->Release();
+		pixelShader_ = nullptr;
+	}
+	if (computeShader_)
+	{
+		computeShader_->Release();
+		computeShader_ = nullptr;
+	}
+	if (constantBuffer_)
+	{
+		constantBuffer_->Release();
+		constantBuffer_ = nullptr;
+	}
+	if (computeConstantBuffer_)
+	{
+		computeConstantBuffer_->Release();
+		computeConstantBuffer_ = nullptr;
+	}
+	if (sampler_)
+	{
+		sampler_->Release();
+		sampler_ = nullptr;
+	}
+	if (blendState_)
+	{
+		blendState_->Release();
+		blendState_ = nullptr;
+	}
+	if (particleTexSRV_)
+	{
+		particleTexSRV_->Release();
+		particleTexSRV_ = nullptr;
+	}
 }
