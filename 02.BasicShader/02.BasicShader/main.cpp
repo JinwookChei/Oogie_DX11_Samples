@@ -158,6 +158,7 @@ HRESULT InitD3D(HWND hWnd)
 		return hr;
 	}
 
+
 	return S_OK;
 }
 
@@ -209,6 +210,7 @@ HRESULT InitVertexBuffer()
 		DEBUG_BREAK();
 		return hr;
 	}
+
 	return S_OK;
 }
 

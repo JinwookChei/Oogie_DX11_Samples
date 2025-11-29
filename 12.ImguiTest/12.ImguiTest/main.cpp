@@ -4,20 +4,28 @@
 static float ResolutionWidth = 2560.0f;
 static float ResolutionHeight = 1440.0f;
 
-// System Variable
+// Imgui Variable
 bool g_ShowExitPopup = false;
 bool g_bShow_demo_window = true;
 bool g_bShow_another_window = false;
 ImVec4 g_Imgui_Clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
-//#define ResolutionWidth 2560.0f
-//#define	ResolutionHeigh 1440.0f
-//#define ResolutionWidth 1280.0f
-//#define	ResolutionHeigh 720.0f
-//#define ResolutionWidth 800.0f
-//#define	ResolutionHeigh 600.0f
 
-// ADD
+struct Object
+{
+	Transform transform;
+};
+
+struct Camera
+{
+	DirectX::XMVECTOR camPos;
+	DirectX::XMMATRIX view;
+	DirectX::XMMATRIX proj;
+};
+
+Object* g_pObject = nullptr;
+Camera* g_pCamera = nullptr;
+
 
 // Init
 ID3D11Device* g_pd3dDevice = nullptr;
@@ -494,12 +502,36 @@ HRESULT InitImgui(HWND hWnd, float dpiScale)
 	ImGui::CreateContext();
 	ImGuiIO& io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Control
+	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\malgun.ttf", 24.0f, nullptr, io.Fonts->GetGlyphRangesKorean());
 	ImGui::StyleColorsDark();
 	ImGuiStyle& style = ImGui::GetStyle();
 	style.ScaleAllSizes(dpiScale);
 	ImGui_ImplWin32_Init(hWnd);
 	ImGui_ImplDX11_Init(g_pd3dDevice, g_pImmediateContext);
+
+	ImGuizmo::SetOrthographic(false);
+
+	return S_OK;
+}
+
+HRESULT InitCamera()
+{
+	g_pCamera = new Camera;
+	g_pCamera->camPos = DirectX::XMVectorSet(0.0f, 5.0f, 0.0f, 0.0f);
+	g_pCamera->view= DirectX::XMMatrixLookToLH(g_pCamera->camPos, DirectX::XMVectorSet(0.0f, -1.0f, 0.0f, 0.0f), DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f));
+	g_pCamera->proj = DirectX::XMMatrixPerspectiveFovLH(DirectX::XM_PIDIV4, ResolutionWidth / ResolutionHeight, 0.01f, 100.0f);
+	
+	return S_OK;
+}
+
+HRESULT InitObject()
+{
+	g_pObject = new Object;
+	g_pObject->transform.SetScale({1.0f, 1.0f, 1.0f});
+	g_pObject->transform.SetPosition({0.0f, 0.0f, 0.0f});
+	g_pObject->transform.SetRotation({ 0.0f, 0.0f, 0.0f});
+
 	return S_OK;
 }
 
@@ -548,25 +580,6 @@ HRESULT InitIndexBuffer()
 	}
 	return S_OK;
 }
-
-//HRESULT InitConstantBuffer()
-//{
-//	D3D11_BUFFER_DESC desc;
-//	memset(&desc, 0x00, sizeof(D3D11_BUFFER_DESC));
-//	desc.Usage = D3D11_USAGE_DEFAULT;
-//	desc.ByteWidth = sizeof(ConstantBuffer);
-//	desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-//	desc.CPUAccessFlags = 0;
-//
-//	HRESULT hr = g_pd3dDevice->CreateBuffer(&desc, nullptr, &g_pConstantBuffer);
-//	if (FAILED(hr))
-//	{
-//		DEBUG_BREAK();
-//		return hr;
-//	}
-//
-//	return S_OK;
-//}
 
 HRESULT InitConstantBuffer(UINT byteWidth, ID3D11Buffer** constantBuffer)
 {
@@ -890,27 +903,25 @@ void UpdateConstantResource(const Transform& worldTransform)
 	DirectX::XMMATRIX scale = worldTransform.GetScaleMatrix();
 	DirectX::XMMATRIX rotation = worldTransform.GetRotationMatrix();
 	DirectX::XMMATRIX position = worldTransform.GetPositionMatrix();
+	DirectX::XMMATRIX world = scale * rotation * position;
+	DirectX::XMMATRIX worldInvTranspose = XMMatrixTranspose(XMMatrixInverse(nullptr, world));
 
 	// 월드, 뷰, 프로젝션 행렬 설정
 	// world는 오브젝트마다 고유의 값이며, 각각의 오브젝트의 Transform 을 적용해야함.
-	DirectX::XMMATRIX world = scale * rotation * position;
-	DirectX::XMVECTOR camPos = DirectX::XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
-	DirectX::XMMATRIX view = DirectX::XMMatrixLookToLH(camPos, DirectX::XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f), DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f));
-	DirectX::XMMATRIX projection = DirectX::XMMatrixPerspectiveFovLH(DirectX::XM_PIDIV4, ResolutionWidth / ResolutionHeight, 0.01f, 100.0f);
-	DirectX::XMMATRIX worldInvTranspose = XMMatrixTranspose(XMMatrixInverse(nullptr, world));
+	
 
 
 	CBTransform cbTransform;
 	cbTransform.world = DirectX::XMMatrixTranspose(world);
-	cbTransform.view = DirectX::XMMatrixTranspose(view);
-	cbTransform.projection = DirectX::XMMatrixTranspose(projection);
+	cbTransform.view = DirectX::XMMatrixTranspose(g_pCamera->view);
+	cbTransform.projection = DirectX::XMMatrixTranspose(g_pCamera->proj);
 	cbTransform.worldInvTranspose = XMMatrixTranspose(worldInvTranspose);
 	cbTransform.camPos =
 	{
-		DirectX::XMVectorGetX(camPos),
-		DirectX::XMVectorGetY(camPos),
-		DirectX::XMVectorGetZ(camPos),
-		DirectX::XMVectorGetW(camPos)
+		DirectX::XMVectorGetX(g_pCamera->camPos),
+		DirectX::XMVectorGetY(g_pCamera->camPos),
+		DirectX::XMVectorGetZ(g_pCamera->camPos),
+		DirectX::XMVectorGetW(g_pCamera->camPos)
 	};
 
 	// 일반 빛 색상.
@@ -1035,6 +1046,10 @@ void BeginPlay()
 {
 	CreateSphere(&SpereVertices, &SpereIndices, 0.5f);
 
+	InitCamera();
+
+	InitObject();
+
 	InitDepthStencilBuffer();
 
 	InitVertexBuffer();
@@ -1076,11 +1091,8 @@ void RenderBegin()
 void Render()
 {
 	g_fRotaionAngle += 0.002f;
-
-	Transform tf1;
-	tf1.SetScale({ 1.0f, 1.0f, 1.0f });
-	tf1.SetRotation({ 0.0f, 0.0f, g_fRotaionAngle });
-	tf1.SetPosition({ 5.0f, 0.0f, 0.0f });
+	
+	Transform tf1 = g_pObject->transform;
 	UpdateConstantResource(tf1);
 
 	g_pImmediateContext->DrawIndexed(SpereIndices.size(), 0, 0);
@@ -1093,13 +1105,8 @@ void Render()
 	//g_pImmediateContext->DrawIndexed(SpereIndices.size(), 0, 0);
 }
 
-void RenderImgui(HWND hWnd)
+void ImguiExit(HWND hWnd)
 {
-	// Start the Dear ImGui frame
-	ImGui_ImplDX11_NewFrame();
-	ImGui_ImplWin32_NewFrame();
-	ImGui::NewFrame();
-
 	// ESC 키 감지
 	if (ImGui::IsKeyPressed(ImGuiKey_Escape))
 	{
@@ -1131,7 +1138,10 @@ void RenderImgui(HWND hWnd)
 			ImGui::EndPopup();
 		}
 	}
+}
 
+void ImguiDemo()
+{
 	// 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
 	if (g_bShow_demo_window)
 	{
@@ -1172,8 +1182,245 @@ void RenderImgui(HWND hWnd)
 		}
 		ImGui::End();
 	}
+}
 
-	// Rendering
+void ImguiDockingSpaceDemo()
+{
+	static bool opt_fullscreen = true;
+	static bool opt_padding = false;
+	static ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_None;
+
+	// We are using the ImGuiWindowFlags_NoDocking flag to make the parent window not dockable into,
+	// because it would be confusing to have two docking targets within each others.
+	ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+	if (opt_fullscreen)
+	{
+		const ImGuiViewport* viewport = ImGui::GetMainViewport();
+		ImGui::SetNextWindowPos(viewport->WorkPos);
+		ImGui::SetNextWindowSize(viewport->WorkSize);
+		ImGui::SetNextWindowViewport(viewport->ID);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+		window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+		window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
+	}
+	else
+	{
+		dockspace_flags &= ~ImGuiDockNodeFlags_PassthruCentralNode;
+	}
+
+	// When using ImGuiDockNodeFlags_PassthruCentralNode, DockSpace() will render our background
+	// and handle the pass-thru hole, so we ask Begin() to not render a background.
+	if (dockspace_flags & ImGuiDockNodeFlags_PassthruCentralNode)
+	{
+		window_flags |= ImGuiWindowFlags_NoBackground;
+	}
+
+	// Important: note that we proceed even if Begin() returns false (aka window is collapsed).
+	// This is because we want to keep our DockSpace() active. If a DockSpace() is inactive,
+	// all active windows docked into it will lose their parent and become undocked.
+	// We cannot preserve the docking relationship between an active window and an inactive docking, otherwise
+	// any change of dockspace/settings would lead to windows being stuck in limbo and never being visible.
+	if (!opt_padding)
+	{
+		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+	}
+
+	ImGui::Begin("DockSpace Demo", nullptr, window_flags);
+	if (!opt_padding)
+	{
+		ImGui::PopStyleVar();
+	}
+
+	if (opt_fullscreen)
+	{
+		ImGui::PopStyleVar(2);
+	}
+
+	// Submit the DockSpace
+	// REMINDER: THIS IS A DEMO FOR ADVANCED USAGE OF DockSpace()!
+	// MOST REGULAR APPLICATIONS WILL SIMPLY WANT TO CALL DockSpaceOverViewport(). READ COMMENTS ABOVE.
+	ImGuiIO& io = ImGui::GetIO();
+	if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable)
+	{
+		ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+		ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
+	}
+	else
+	{
+		// ShowDockingDisabledMessage();
+	}
+
+	// Show demo options and help
+	if (ImGui::BeginMenuBar())
+	{
+		if (ImGui::BeginMenu("Options"))
+		{
+			// Disabling fullscreen would allow the window to be moved to the front of other windows,
+			// which we can't undo at the moment without finer window depth/z control.
+			ImGui::MenuItem("Fullscreen", NULL, &opt_fullscreen);
+			ImGui::MenuItem("Padding", NULL, &opt_padding);
+			ImGui::Separator();
+
+			if (ImGui::MenuItem("Flag: NoDockingOverCentralNode", "", (dockspace_flags & ImGuiDockNodeFlags_NoDockingOverCentralNode) != 0)) { dockspace_flags ^= ImGuiDockNodeFlags_NoDockingOverCentralNode; }
+			if (ImGui::MenuItem("Flag: NoDockingSplit", "", (dockspace_flags & ImGuiDockNodeFlags_NoDockingSplit) != 0)) { dockspace_flags ^= ImGuiDockNodeFlags_NoDockingSplit; }
+			if (ImGui::MenuItem("Flag: NoUndocking", "", (dockspace_flags & ImGuiDockNodeFlags_NoUndocking) != 0)) { dockspace_flags ^= ImGuiDockNodeFlags_NoUndocking; }
+			if (ImGui::MenuItem("Flag: NoResize", "", (dockspace_flags & ImGuiDockNodeFlags_NoResize) != 0)) { dockspace_flags ^= ImGuiDockNodeFlags_NoResize; }
+			if (ImGui::MenuItem("Flag: AutoHideTabBar", "", (dockspace_flags & ImGuiDockNodeFlags_AutoHideTabBar) != 0)) { dockspace_flags ^= ImGuiDockNodeFlags_AutoHideTabBar; }
+			if (ImGui::MenuItem("Flag: PassthruCentralNode", "", (dockspace_flags & ImGuiDockNodeFlags_PassthruCentralNode) != 0, opt_fullscreen)) { dockspace_flags ^= ImGuiDockNodeFlags_PassthruCentralNode; }
+			ImGui::Separator();
+
+			if (ImGui::MenuItem("Close", NULL, false, nullptr != NULL))
+			{
+				//*p_open = false;
+			}
+			ImGui::EndMenu();
+		}
+		if (ImGui::BeginMenu("Help"))
+		{
+			ImGui::TextUnformatted(
+				"This demo has nothing to do with enabling docking!" "\n"
+				"This demo only demonstrate the use of ImGui::DockSpace() which allows you to manually\ncreate a docking node _within_ another window." "\n"
+				"Most application can simply call ImGui::DockSpaceOverViewport() and be done with it.");
+			ImGui::Separator();
+			ImGui::TextUnformatted("When docking is enabled, you can ALWAYS dock MOST window into another! Try it now!" "\n"
+				"- Drag from window title bar or their tab to dock/undock." "\n"
+				"- Drag from window menu button (upper-left button) to undock an entire node (all windows)." "\n"
+				"- Hold SHIFT to disable docking (if io.ConfigDockingWithShift == false, default)" "\n"
+				"- Hold SHIFT to enable docking (if io.ConfigDockingWithShift == true)");
+			ImGui::Separator();
+			ImGui::TextUnformatted("More details:"); ImGui::Bullet(); ImGui::SameLine(); ImGui::TextLinkOpenURL("Docking Wiki page", "https://github.com/ocornut/imgui/wiki/Docking");
+			ImGui::BulletText("Read comments in ShowExampleAppDockSpace()");
+			ImGui::EndMenu();
+		}
+		ImGui::EndMenuBar();
+	}
+
+	ImGui::End();
+}
+
+void MatrixToTransform(const DirectX::XMMATRIX& mat, Transform& out)
+{
+	DirectX::XMFLOAT4X4 m;
+	XMStoreFloat4x4(&m, mat);
+	
+	//// Scale 추출
+	//float sx = sqrtf(m._11 * m._11 + m._12 * m._12 + m._13 * m._13);
+	//float sy = sqrtf(m._21 * m._21 + m._22 * m._22 + m._23 * m._23);
+	//float sz = sqrtf(m._31 * m._31 + m._32 * m._32 + m._33 * m._33);
+	//out.SetScale({ sx, sy, sz});
+
+	//// Rotation 추출
+	//float ry = atan2f(-m._13, sqrtf(m._11 * m._11 + m._12 * m._12));
+	//float rx = atan2f(m._23, m._33);
+	//float rz = atan2f(m._12, m._11);
+	//rx = DirectX::XMConvertToDegrees(rx);
+	//ry = DirectX::XMConvertToDegrees(ry);
+	//rz = DirectX::XMConvertToDegrees(rz);
+	//out.SetRotation({ rx, ry, rz });
+
+	// Translation 추출
+	//out.Position = { m._41, m._42, m._43 };
+	out.SetPosition({ m._41, m._42, m._43 });
+}
+
+void ImguiPickingTransform()
+{
+	ImGui::Begin("Transform Controller");
+	ImGui::Text("Position: %.2f %.2f %.2f", 
+		g_pObject->transform.GetPosition().X, 
+		g_pObject->transform.GetPosition().Y, 
+		g_pObject->transform.GetPosition().Z);
+	ImGui::Text("Rotation: %.2f %.2f %.2f", 
+		g_pObject->transform.GetRotation().X, 
+		g_pObject->transform.GetRotation().Y, 
+		g_pObject->transform.GetRotation().Z);
+	ImGui::Text("Scale: %.2f %.2f %.2f", 
+		g_pObject->transform.GetScale().X, 
+		g_pObject->transform.GetScale().Y, 
+		g_pObject->transform.GetScale().Z);
+	ImGui::End();
+
+	// === ImGuizmo 설정 ===
+	ImGuizmo::BeginFrame();
+	ImGuizmo::Enable(true);
+
+	// 조작 대상 변환 행렬
+	Float4x4 mat = g_pObject->transform.GetWorldMatrixTranspose();
+	DirectX::XMFLOAT4X4 worldMat;
+	
+	worldMat.m[0][0] = mat.r[0].X;
+	worldMat.m[0][1] = mat.r[0].Y;
+	worldMat.m[0][2] = mat.r[0].Z;
+	worldMat.m[0][3] = mat.r[0].W;
+
+	worldMat.m[1][0] = mat.r[1].X;
+	worldMat.m[1][1] = mat.r[1].Y;
+	worldMat.m[1][2] = mat.r[1].Z;
+	worldMat.m[1][3] = mat.r[1].W;
+
+	worldMat.m[2][0] = mat.r[2].X;
+	worldMat.m[2][1] = mat.r[2].Y;
+	worldMat.m[2][2] = mat.r[2].Z;
+	worldMat.m[2][3] = mat.r[2].W;
+
+	worldMat.m[3][0] = mat.r[3].X;
+	worldMat.m[3][1] = mat.r[3].Y;
+	worldMat.m[3][2] = mat.r[3].Z;
+	worldMat.m[3][3] = mat.r[3].W;
+
+	float matrix[16];
+	memcpy(matrix, &worldMat, sizeof(float) * 16);
+
+	static ImGuizmo::OPERATION currentOp = ImGuizmo::TRANSLATE;
+	static ImGuizmo::MODE currentMode = ImGuizmo::WORLD;
+
+	// === 키보드로 모드 전환 ===
+	if (ImGui::IsKeyPressed(ImGuiKey_T)) currentOp = ImGuizmo::TRANSLATE;
+	if (ImGui::IsKeyPressed(ImGuiKey_R)) currentOp = ImGuizmo::ROTATE;
+	if (ImGui::IsKeyPressed(ImGuiKey_S)) currentOp = ImGuizmo::SCALE;
+
+	// === Gizmo 표시 영역 ===
+	ImGuiIO& io = ImGui::GetIO();
+	ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
+
+	// === 실제 기즈모 조작 ===
+	ImGuizmo::Manipulate(
+		(float*)&g_pCamera->view,
+		(float*)&g_pCamera->proj,
+		currentOp,
+		currentMode,
+		matrix
+	);
+
+	// === 수정 결과를 Transform으로 되돌림 ===
+	if (ImGuizmo::IsUsing())
+	{
+		DirectX::XMMATRIX newMat = DirectX::XMLoadFloat4x4((DirectX::XMFLOAT4X4*)matrix);
+		MatrixToTransform(newMat, g_pObject->transform);
+	}
+
+	// === ImGui 렌더링 ===
+	ImGui::Render();
+	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+}
+
+void RenderImgui(HWND hWnd)
+{
+	// Start the Dear ImGui frame
+	ImGui_ImplDX11_NewFrame();
+	ImGui_ImplWin32_NewFrame();
+	ImGui::NewFrame();
+
+	ImguiExit(hWnd);
+
+	ImguiPickingTransform();
+
+	// ImguiDockingSpaceDemo();
+	
+	// ImguiDemo();
+
+	// 렌더
 	ImGui::Render();
 	ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 }
@@ -1197,6 +1444,16 @@ void Cleanup()
 {
 	CleanupImgui();
 
+	if (g_pObject)
+	{
+		delete g_pObject;
+		g_pObject = nullptr;
+	}
+	if (g_pCamera)
+	{
+		delete g_pCamera;
+		g_pCamera = nullptr;
+	}
 	if (g_pRasterizerState) g_pRasterizerState->Release();
 	if (g_pAlphaBlendState) g_pAlphaBlendState->Release();
 	if (g_pNormalMapShaderResourceView) g_pNormalMapShaderResourceView->Release();
@@ -1334,3 +1591,177 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 #endif  // _DEBUG
 	return (int)msg.wParam;
 }
+
+
+//#include "stdafx.h"
+//using namespace DirectX;
+//
+//// === 구조체 ===
+//struct Transform1
+//{
+//    XMFLOAT3 Position = { 0, 0, 0 };
+//    XMFLOAT3 Rotation = { 0, 0, 0 };
+//    XMFLOAT3 Scale = { 1, 1, 1 };
+//};
+//
+//// === Transform ↔ Matrix 변환 ===
+//XMMATRIX TransformToMatrix(const Transform1& t)
+//{
+//    return XMMatrixScaling(t.Scale.x, t.Scale.y, t.Scale.z) *
+//        XMMatrixRotationRollPitchYaw(
+//            XMConvertToRadians(t.Rotation.x),
+//            XMConvertToRadians(t.Rotation.y),
+//            XMConvertToRadians(t.Rotation.z)) *
+//        XMMatrixTranslation(t.Position.x, t.Position.y, t.Position.z);
+//}
+//
+//void MatrixToTransform(const XMMATRIX& m, Transform1& out)
+//{
+//    XMFLOAT4X4 mat;
+//    XMStoreFloat4x4(&mat, m);
+//    out.Position = { mat._41, mat._42, mat._43 };
+//
+//    out.Scale.x = sqrtf(mat._11 * mat._11 + mat._12 * mat._12 + mat._13 * mat._13);
+//    out.Scale.y = sqrtf(mat._21 * mat._21 + mat._22 * mat._22 + mat._23 * mat._23);
+//    out.Scale.z = sqrtf(mat._31 * mat._31 + mat._32 * mat._32 + mat._33 * mat._33);
+//
+//    out.Rotation.y = atan2f(-mat._13, sqrtf(mat._11 * mat._11 + mat._12 * mat._12));
+//    out.Rotation.x = atan2f(mat._23, mat._33);
+//    out.Rotation.z = atan2f(mat._12, mat._11);
+//    out.Rotation.x = XMConvertToDegrees(out.Rotation.x);
+//    out.Rotation.y = XMConvertToDegrees(out.Rotation.y);
+//    out.Rotation.z = XMConvertToDegrees(out.Rotation.z);
+//}
+//
+//// === 간단한 상수 버퍼 ===
+//struct CBData
+//{
+//    XMMATRIX World;
+//    XMMATRIX View;
+//    XMMATRIX Proj;
+//};
+//
+//// === 전역 ===
+//Transform1 g_ObjectTransform;
+//ImGuizmo::OPERATION g_CurrentOp = ImGuizmo::TRANSLATE;
+//ImGuizmo::MODE g_CurrentMode = ImGuizmo::WORLD;
+//
+//// === 카메라 행렬 ===
+//XMMATRIX g_View = XMMatrixLookAtLH(
+//    XMVectorSet(0, 2, -5, 1),
+//    XMVectorSet(0, 0, 0, 1),
+//    XMVectorSet(0, 1, 0, 0));
+//XMMATRIX g_Proj = XMMatrixPerspectiveFovLH(XM_PIDIV4, 16.0f / 9.0f, 0.1f, 100.0f);
+//
+//ID3D11Buffer* g_ConstantBuffer = nullptr;
+//
+//// === 기본 큐브 버텍스 정의 ===
+//struct Vertex
+//{
+//    XMFLOAT3 pos;
+//    XMFLOAT4 color;
+//};
+//
+//ID3D11Buffer* g_VertexBuffer = nullptr;
+//ID3D11Buffer* g_IndexBuffer = nullptr;
+//
+//// === 초기화: 간단한 큐브 만들기 ===
+//void CreateCube(ID3D11Device* device)
+//{
+//    Vertex vertices[] = {
+//        {{-1, -1, -1}, {1, 0, 0, 1}}, {{-1, +1, -1}, {0, 1, 0, 1}},
+//        {{+1, +1, -1}, {0, 0, 1, 1}}, {{+1, -1, -1}, {1, 1, 0, 1}},
+//        {{-1, -1, +1}, {1, 0, 1, 1}}, {{-1, +1, +1}, {0, 1, 1, 1}},
+//        {{+1, +1, +1}, {1, 1, 1, 1}}, {{+1, -1, +1}, {0, 0, 0, 1}},
+//    };
+//
+//    uint16_t indices[] = {
+//        0,1,2, 0,2,3, // front
+//        4,6,5, 4,7,6, // back
+//        4,5,1, 4,1,0, // left
+//        3,2,6, 3,6,7, // right
+//        1,5,6, 1,6,2, // top
+//        4,0,3, 4,3,7  // bottom
+//    };
+//
+//    D3D11_BUFFER_DESC vbd{};
+//    vbd.Usage = D3D11_USAGE_DEFAULT;
+//    vbd.ByteWidth = sizeof(vertices);
+//    vbd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+//
+//    D3D11_SUBRESOURCE_DATA vinit{};
+//    vinit.pSysMem = vertices;
+//    device->CreateBuffer(&vbd, &vinit, &g_VertexBuffer);
+//
+//    D3D11_BUFFER_DESC ibd{};
+//    ibd.Usage = D3D11_USAGE_DEFAULT;
+//    ibd.ByteWidth = sizeof(indices);
+//    ibd.BindFlags = D3D11_BIND_INDEX_BUFFER;
+//
+//    D3D11_SUBRESOURCE_DATA iinit{};
+//    iinit.pSysMem = indices;
+//    device->CreateBuffer(&ibd, &iinit, &g_IndexBuffer);
+//
+//    // Constant Buffer
+//    D3D11_BUFFER_DESC cbd{};
+//    cbd.Usage = D3D11_USAGE_DEFAULT;
+//    cbd.ByteWidth = sizeof(CBData);
+//    cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+//    device->CreateBuffer(&cbd, nullptr, &g_ConstantBuffer);
+//}
+//
+//// === 렌더링 ===
+//void RenderFrame(ID3D11DeviceContext* context)
+//{
+//    ImGui_ImplDX11_NewFrame();
+//    ImGui_ImplWin32_NewFrame();
+//    ImGui::NewFrame();
+//    ImGuizmo::BeginFrame();
+//
+//    ImGui::Begin("Gizmo Controls");
+//    if (ImGui::Button("Translate")) g_CurrentOp = ImGuizmo::TRANSLATE;
+//    ImGui::SameLine();
+//    if (ImGui::Button("Rotate")) g_CurrentOp = ImGuizmo::ROTATE;
+//    ImGui::SameLine();
+//    if (ImGui::Button("Scale")) g_CurrentOp = ImGuizmo::SCALE;
+//    ImGui::End();
+//
+//    // === ImGuizmo 세팅 ===
+//    ImGuiIO& io = ImGui::GetIO();
+//    ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
+//
+//    XMMATRIX world = TransformToMatrix(g_ObjectTransform);
+//    XMFLOAT4X4 worldMat;
+//    XMStoreFloat4x4(&worldMat, world);
+//    float matrix[16];
+//    memcpy(matrix, &worldMat, sizeof(matrix));
+//
+//    // === Gizmo 표시 및 조작 ===
+//    ImGuizmo::Manipulate((float*)&g_View, (float*)&g_Proj, g_CurrentOp, g_CurrentMode, matrix);
+//
+//    if (ImGuizmo::IsUsing())
+//    {
+//        XMMATRIX newMat = XMLoadFloat4x4((XMFLOAT4X4*)matrix);
+//        MatrixToTransform(newMat, g_ObjectTransform);
+//    }
+//
+//    // === 실제 큐브 렌더링 ===
+//    CBData cb;
+//    cb.World = XMMatrixTranspose(TransformToMatrix(g_ObjectTransform));
+//    cb.View = XMMatrixTranspose(g_View);
+//    cb.Proj = XMMatrixTranspose(g_Proj);
+//    context->UpdateSubresource(g_ConstantBuffer, 0, nullptr, &cb, 0, 0);
+//
+//    UINT stride = sizeof(Vertex);
+//    UINT offset = 0;
+//    context->IASetVertexBuffers(0, 1, &g_VertexBuffer, &stride, &offset);
+//    context->IASetIndexBuffer(g_IndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+//    context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+//    context->VSSetConstantBuffers(0, 1, &g_ConstantBuffer);
+//
+//    context->DrawIndexed(36, 0, 0);
+//
+//    // === ImGui 렌더 ===
+//    ImGui::Render();
+//    ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+//}

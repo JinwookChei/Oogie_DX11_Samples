@@ -25,6 +25,15 @@
     <Filter Include="Source Files\Math\VectorType">
       <UniqueIdentifier>{648e9be2-be9e-4cd6-aab0-b2aa2907ddcf}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\Include">
+      <UniqueIdentifier>{a35e429c-89d6-4b4c-be98-dcaddcf74053}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Include\Imgui">
+      <UniqueIdentifier>{9ce52f44-ed7c-4a61-b58e-5c389565cf92}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Include\Imguizmo">
+      <UniqueIdentifier>{bda81862-48ae-4fe0-b1f3-c7efac98ffc4}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Transform.cpp">
@@ -38,6 +47,42 @@
     </ClCompile>
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Include\Imguizmo\GraphEditor.cpp">
+      <Filter>Source Files\Include\Imguizmo</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Include\Imguizmo\ImCurveEdit.cpp">
+      <Filter>Source Files\Include\Imguizmo</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Include\Imguizmo\ImGradient.cpp">
+      <Filter>Source Files\Include\Imguizmo</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Include\Imguizmo\ImGuizmo.cpp">
+      <Filter>Source Files\Include\Imguizmo</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Include\Imguizmo\ImSequencer.cpp">
+      <Filter>Source Files\Include\Imguizmo</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Include\Imgui\imgui.cpp">
+      <Filter>Source Files\Include\Imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Include\Imgui\imgui_demo.cpp">
+      <Filter>Source Files\Include\Imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Include\Imgui\imgui_draw.cpp">
+      <Filter>Source Files\Include\Imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Include\Imgui\imgui_impl_dx11.cpp">
+      <Filter>Source Files\Include\Imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Include\Imgui\imgui_impl_win32.cpp">
+      <Filter>Source Files\Include\Imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Include\Imgui\imgui_tables.cpp">
+      <Filter>Source Files\Include\Imgui</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Include\Imgui\imgui_widgets.cpp">
+      <Filter>Source Files\Include\Imgui</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -57,6 +102,48 @@
     </ClInclude>
     <ClInclude Include="stdafx.h">
       <Filter>PrecompiledHeader</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Include\Imguizmo\GraphEditor.h">
+      <Filter>Source Files\Include\Imguizmo</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Include\Imguizmo\ImCurveEdit.h">
+      <Filter>Source Files\Include\Imguizmo</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Include\Imguizmo\ImGradient.h">
+      <Filter>Source Files\Include\Imguizmo</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Include\Imguizmo\ImGuizmo.h">
+      <Filter>Source Files\Include\Imguizmo</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Include\Imguizmo\ImSequencer.h">
+      <Filter>Source Files\Include\Imguizmo</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Include\Imguizmo\ImZoomSlider.h">
+      <Filter>Source Files\Include\Imguizmo</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Include\Imgui\imconfig.h">
+      <Filter>Source Files\Include\Imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Include\Imgui\imgui.h">
+      <Filter>Source Files\Include\Imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Include\Imgui\imgui_impl_dx11.h">
+      <Filter>Source Files\Include\Imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Include\Imgui\imgui_impl_win32.h">
+      <Filter>Source Files\Include\Imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Include\Imgui\imgui_internal.h">
+      <Filter>Source Files\Include\Imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Include\Imgui\imstb_rectpack.h">
+      <Filter>Source Files\Include\Imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Include\Imgui\imstb_textedit.h">
+      <Filter>Source Files\Include\Imgui</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Include\Imgui\imstb_truetype.h">
+      <Filter>Source Files\Include\Imgui</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
