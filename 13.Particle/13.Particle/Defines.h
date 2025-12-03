@@ -1,5 +1,4 @@
 #pragma once
-
 struct ConstantBuffer
 {
 	DirectX::XMFLOAT4X4 viewProj_;

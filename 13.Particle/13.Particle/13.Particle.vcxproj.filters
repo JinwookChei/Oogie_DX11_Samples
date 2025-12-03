@@ -26,13 +26,13 @@
       <UniqueIdentifier>{648e9be2-be9e-4cd6-aab0-b2aa2907ddcf}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\CPU">
-      <UniqueIdentifier>{cefe762a-0fa8-4be3-98f6-fcc12672487b}</UniqueIdentifier>
+      <UniqueIdentifier>{8ddaec72-2388-459f-a2c2-dd7d70a9e6ba}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\GPU">
-      <UniqueIdentifier>{dee7b460-1d27-4ab0-891d-8274f85bab37}</UniqueIdentifier>
+      <UniqueIdentifier>{af0cedc0-7d63-41e8-a0b3-6cd00973134e}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\Define">
-      <UniqueIdentifier>{72304d91-90a0-4ccb-a702-242613f3ec04}</UniqueIdentifier>
+      <UniqueIdentifier>{7a9e707d-0f0b-47f8-a63e-ee06f476808b}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -68,7 +68,7 @@
     <ClInclude Include="ParticleSystemCPU.h">
       <Filter>Source Files\CPU</Filter>
     </ClInclude>
-    <ClInclude Include="Define.h">
+    <ClInclude Include="Defines.h">
       <Filter>Source Files\Define</Filter>
     </ClInclude>
     <ClInclude Include="ParticleSystemGPU.h">
@@ -76,13 +76,13 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="GeometryShader.hlsl">
-      <Filter>Resource Files</Filter>
-    </FxCompile>
     <FxCompile Include="VertexShaderCPU.hlsl">
       <Filter>Resource Files</Filter>
     </FxCompile>
     <FxCompile Include="PixelShader.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="GeometryShader.hlsl">
       <Filter>Resource Files</Filter>
     </FxCompile>
     <FxCompile Include="ComputeShader.hlsl">

@@ -1,28 +1,24 @@
 #include "stdafx.h"
 #include "ParticleSystemGPU.h"
 
-static HRESULT LoadCSO(const wchar_t* filePath, ID3DBlob** ppBlob)
-{
-	return D3DReadFileToBlob(filePath, ppBlob);
-}
 
 float ParticleSystemGPU::gTimeAcc_ = 0.0f;
 int ParticleSystemGPU::gGpuPatternMode_ = 0;
 
 ParticleSystemGPU::ParticleSystemGPU()
-	:maxParticles_(0),
-	particleBuffer_(nullptr),
-	particleSRV_(nullptr),
-	particleUAV_(nullptr),
-	vertexShader_(nullptr),
-	geometryShader_(nullptr),
-	pixelShader_(nullptr),
-	computeShader_(nullptr),
-	constantBuffer_(nullptr),
-	computeConstantBuffer_(nullptr),
-	sampler_(nullptr),
-	blendState_(nullptr),
-	particleTexSRV_(nullptr)
+	: maxParticleCnt_(0)
+	, pParticleBuffer_(nullptr)
+	, pVertexShader_(nullptr)
+	, pGeometryShader_(nullptr)
+	, pPixelShader_(nullptr)
+	, pComputeShader_(nullptr)
+	, pConstantBuffer_(nullptr)
+	, pComputeConstantBuffer_(nullptr)
+	, pBlendState_(nullptr)
+	, pSamplerState_(nullptr)
+	, pParticleSRV_(nullptr)
+	, pParticleUAV_(nullptr)
+	, pParticleTextureSRV_(nullptr)
 {
 }
 
@@ -31,13 +27,120 @@ ParticleSystemGPU::~ParticleSystemGPU()
 	CleanUp();
 }
 
-bool ParticleSystemGPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11ShaderResourceView* particleTex)
+bool ParticleSystemGPU::Init(ID3D11Device* pDevice, unsigned int maxParticleCnt, ID3D11ShaderResourceView* pTextureSRV)
 {
-	maxParticles_ = maxPrticles;
-	particleTexSRV_ = particleTex;
-	particleTexSRV_->AddRef();
+	if (false == InitParticleBuffer(pDevice, maxParticleCnt))
+	{
+		DEBUG_BREAK();
+		return false;
+	}
 
-	std::vector<ParticleGPU> initData(maxParticles_);
+	if (false == InitShaders(pDevice))
+	{
+		DEBUG_BREAK();
+		return false;
+	}
+
+	if (false == InitConstantBuffer(pDevice))
+	{
+		DEBUG_BREAK();
+		return false;
+	}
+
+	if (false == InitBlendState(pDevice))
+	{
+		DEBUG_BREAK();
+		return false;
+	}
+
+	if (false == InitSamplerState(pDevice))
+	{
+		DEBUG_BREAK();
+		return false;
+	}
+
+	if (nullptr == pTextureSRV)
+	{
+		DEBUG_BREAK();
+		return false;
+	}
+
+	pParticleTextureSRV_ = pTextureSRV;
+	pParticleTextureSRV_->AddRef();
+
+	return true;
+}
+
+void ParticleSystemGPU::Tick(ID3D11DeviceContext* pDeviceContext, float deltaTime)
+{
+	ComputeConstantBuffer ccBuffer = {};
+	ccBuffer.deltaTime_ = deltaTime;
+	ccBuffer.maxParticles_ = (UINT)maxParticleCnt_;
+	ccBuffer.time_ = gTimeAcc_;
+	ccBuffer.spawnMode_ = gGpuPatternMode_; // 0 : Æø¹ß, 1 : ºÐ¼ö
+	pDeviceContext->UpdateSubresource(pComputeConstantBuffer_, 0, nullptr, &ccBuffer, 0, 0);
+
+
+	pDeviceContext->CSSetShader(pComputeShader_, nullptr, 0);
+	pDeviceContext->CSSetConstantBuffers(1, 1, &pComputeConstantBuffer_);
+	pDeviceContext->CSSetUnorderedAccessViews(0, 1, &pParticleUAV_, nullptr);
+
+	UINT groupCount = (maxParticleCnt_ + 255) / 256;
+	pDeviceContext->Dispatch(groupCount, 1, 1);
+
+	ID3D11UnorderedAccessView* nullUAV = nullptr;
+	pDeviceContext->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
+	pDeviceContext->CSSetShader(nullptr, nullptr, 0);
+}
+
+void ParticleSystemGPU::Render(ID3D11DeviceContext* pDeviceContext, const DirectX::XMMATRIX& viewProj, const DirectX::XMFLOAT3& cameraRight, const DirectX::XMFLOAT3& cameraUp)
+{
+	ConstantBuffer cb = {};
+	DirectX::XMStoreFloat4x4(&cb.viewProj_, DirectX::XMMatrixTranspose(viewProj));
+	cb.cameraRight_ = cameraRight;
+	cb.startSize_ = 0.5f;
+	cb.cameraUp_ = cameraUp;
+	cb.endSize_ = 0.1f;
+	cb.startColor_ = DirectX::XMFLOAT4(0.1f, 0.6f, 1.0f, 1.0f);
+	cb.endColor_ = DirectX::XMFLOAT4(0.1f, 0.1f, 1.0f, 0.0f);
+	pDeviceContext->UpdateSubresource(pConstantBuffer_, 0, nullptr, &cb, 0, 0);
+
+	pDeviceContext->IASetInputLayout(nullptr);
+	UINT stride = 0;
+	UINT offset = 0;
+	ID3D11Buffer* nullVB = nullptr;
+	pDeviceContext->IASetVertexBuffers(0, 1, &nullVB, &stride, &offset);
+	pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
+
+	pDeviceContext->VSSetShader(pVertexShader_, nullptr, 0);
+	pDeviceContext->GSSetShader(pGeometryShader_, nullptr, 0);
+	pDeviceContext->PSSetShader(pPixelShader_, nullptr, 0);
+
+	pDeviceContext->GSSetConstantBuffers(0, 1, &pConstantBuffer_);
+	pDeviceContext->PSSetConstantBuffers(0, 1, &pConstantBuffer_);
+
+	pDeviceContext->VSSetShaderResources(1, 1, &pParticleSRV_);
+	pDeviceContext->PSSetShaderResources(0, 1, &pParticleTextureSRV_);
+
+	pDeviceContext->PSSetSamplers(0, 1, &pSamplerState_);
+
+	float blendFactor[4] = { 0, 0, 0, 0 };
+	UINT samplerMask = 0xffffffff;
+	pDeviceContext->OMSetBlendState(pBlendState_, blendFactor, samplerMask);
+
+	pDeviceContext->Draw(maxParticleCnt_, 0);
+
+	pDeviceContext->GSSetShader(nullptr, nullptr, 0);
+	ID3D11ShaderResourceView* nullSRV[2] = { nullptr, nullptr };
+	pDeviceContext->VSSetShaderResources(1, 1, nullSRV);
+}
+
+
+bool ParticleSystemGPU::InitParticleBuffer(ID3D11Device* pDevice, unsigned int maxParticleCnt)
+{
+	maxParticleCnt_ = maxParticleCnt;
+
+	std::vector<ParticleGPU> initData(maxParticleCnt_);
 	for (ParticleGPU& particle : initData)
 	{
 		particle.position_ = DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f);
@@ -46,30 +149,30 @@ bool ParticleSystemGPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11
 		particle.age_ = 1.0f;
 	}
 
-	D3D11_BUFFER_DESC bd = {};
-	bd.ByteWidth = sizeof(ParticleGPU) * maxParticles_;
-	bd.Usage = D3D11_USAGE_DEFAULT;
-	bd.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
-	bd.CPUAccessFlags = 0;
-	bd.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
-	bd.StructureByteStride = sizeof(ParticleGPU);
+	D3D11_BUFFER_DESC desc = {};
+	desc.ByteWidth = sizeof(ParticleGPU) * maxParticleCnt_;
+	desc.Usage = D3D11_USAGE::D3D11_USAGE_DEFAULT;
+	desc.BindFlags = D3D11_BIND_FLAG::D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_FLAG::D3D11_BIND_SHADER_RESOURCE;
+	desc.CPUAccessFlags = 0;
+	desc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+	desc.StructureByteStride = sizeof(ParticleGPU);
 
-	D3D11_SUBRESOURCE_DATA srd = {};
-	srd.pSysMem = initData.data();
-
-	if (FAILED(device->CreateBuffer(&bd, &srd, &particleBuffer_)))
+	D3D11_SUBRESOURCE_DATA data = {};
+	data.pSysMem = initData.data();
+	if (FAILED(pDevice->CreateBuffer(&desc, &data, &pParticleBuffer_)))
 	{
 		DEBUG_BREAK();
 		return false;
 	}
 
+
 	D3D11_SHADER_RESOURCE_VIEW_DESC srvd = {};
 	srvd.Format = DXGI_FORMAT_UNKNOWN;
 	srvd.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
 	srvd.Buffer.FirstElement = 0;
-	srvd.Buffer.NumElements = maxParticles_;
+	srvd.Buffer.NumElements = maxParticleCnt_;
 
-	if (FAILED(device->CreateShaderResourceView(particleBuffer_, &srvd, &particleSRV_)))
+	if (FAILED(pDevice->CreateShaderResourceView(pParticleBuffer_, &srvd, &pParticleSRV_)))
 	{
 		DEBUG_BREAK();
 		return false;
@@ -79,107 +182,113 @@ bool ParticleSystemGPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11
 	uavd.Format = DXGI_FORMAT_UNKNOWN;
 	uavd.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
 	uavd.Buffer.FirstElement = 0;
-	uavd.Buffer.NumElements = maxParticles_;
+	uavd.Buffer.NumElements = maxParticleCnt_;
 	uavd.Buffer.Flags = 0;
 
-	if (FAILED(device->CreateUnorderedAccessView(particleBuffer_, &uavd, &particleUAV_)))
+	if (FAILED(pDevice->CreateUnorderedAccessView(pParticleBuffer_, &uavd, &pParticleUAV_)))
 	{
 		DEBUG_BREAK();
 		return false;
 	}
 
-	ID3DBlob* vsBlob = nullptr;
-	ID3DBlob* gsBlob = nullptr;
-	ID3DBlob* psBlob = nullptr;
-	ID3DBlob* csBlob = nullptr;
 
-	if (FAILED(LoadCSO(L"VertexShaderGPU.cso", &vsBlob)))
-	{
-		DEBUG_BREAK();
-		return false;
-	}
-	if (FAILED(LoadCSO(L"GeometryShader.cso", &gsBlob)))
-	{
-		DEBUG_BREAK();
-		vsBlob->Release();
-		return false;
-	}
-	if (FAILED(LoadCSO(L"PixelShader.cso", &psBlob)))
-	{
-		DEBUG_BREAK();
-		vsBlob->Release();
-		gsBlob->Release();
-		return false;
-	}
-	if (FAILED(LoadCSO(L"ComputeShader.cso", &csBlob)))
-	{
-		DEBUG_BREAK();
-		vsBlob->Release();
-		gsBlob->Release();
-		psBlob->Release();
-		return false;
-	}
-	if (FAILED(device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &vertexShader_)))
-	{
-		DEBUG_BREAK();
-		vsBlob->Release();
-		gsBlob->Release();
-		psBlob->Release();
-		csBlob->Release();
-		return false;
-	}
-	if (FAILED(device->CreateGeometryShader(gsBlob->GetBufferPointer(), gsBlob->GetBufferSize(), nullptr, &geometryShader_)))
-	{
-		DEBUG_BREAK();
-		vsBlob->Release();
-		gsBlob->Release();
-		psBlob->Release();
-		csBlob->Release();
-		return false;
-	}
-	if (FAILED(device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &pixelShader_)))
-	{
-		DEBUG_BREAK();
-		vsBlob->Release();
-		gsBlob->Release();
-		psBlob->Release();
-		csBlob->Release();
-		return false;
-	}
-	if (FAILED(device->CreateComputeShader(csBlob->GetBufferPointer(), csBlob->GetBufferSize(), nullptr, &computeShader_)))
-	{
-		DEBUG_BREAK();
-		vsBlob->Release();
-		gsBlob->Release();
-		psBlob->Release();
-		csBlob->Release();
-		return false;
-	}
-	vsBlob->Release();
-	gsBlob->Release();
-	psBlob->Release();
-	csBlob->Release();
+	return true;
+}
 
-	D3D11_BUFFER_DESC cbd = {};
-	cbd.Usage = D3D11_USAGE_DEFAULT;
-	cbd.ByteWidth = sizeof(ConstantBuffer);
-	cbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-	if (FAILED(device->CreateBuffer(&cbd, nullptr, &constantBuffer_)))
+bool ParticleSystemGPU::InitShaders(ID3D11Device* pDevice)
+{
+	const wchar_t* pCSPath = L"ComputeShader.cso";
+	const wchar_t* pVSPath = L"VertexShaderGPU.cso";
+	const wchar_t* pPSPath = L"PixelShader.cso";
+	const wchar_t* pGSPath = L"GeometryShader.cso";
+	
+	ID3DBlob* pCSBlob = nullptr;
+	ID3DBlob* pVSBlob = nullptr;
+	ID3DBlob* pPSBlob = nullptr;
+	ID3DBlob* pGSBlob = nullptr;
+
+	do
 	{
-		DEBUG_BREAK();
-		return false;
+		if (FAILED(D3DReadFileToBlob(pCSPath, &pCSBlob))) break;
+		if (FAILED(D3DReadFileToBlob(pVSPath, &pVSBlob))) break;
+		if (FAILED(D3DReadFileToBlob(pPSPath, &pPSBlob))) break;
+		if (FAILED(D3DReadFileToBlob(pGSPath, &pGSBlob))) break;
+		if (FAILED(pDevice->CreateComputeShader(pCSBlob->GetBufferPointer(), pCSBlob->GetBufferSize(), nullptr, &pComputeShader_))) break;
+		if (FAILED(pDevice->CreateVertexShader(pVSBlob->GetBufferPointer(), pVSBlob->GetBufferSize(), nullptr, &pVertexShader_))) break;
+		if (FAILED(pDevice->CreatePixelShader(pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), nullptr, &pPixelShader_))) break;
+		if (FAILED(pDevice->CreateGeometryShader(pGSBlob->GetBufferPointer(), pGSBlob->GetBufferSize(), nullptr, &pGeometryShader_))) break;
+		return true;
+	} while (true);
+
+
+	DEBUG_BREAK();
+
+	if (nullptr != pGeometryShader_)
+	{
+		pGeometryShader_->Release();
+		pGeometryShader_ = nullptr;
+	}
+	if (nullptr != pPixelShader_)
+	{
+		pPixelShader_->Release();
+		pPixelShader_ = nullptr;
+	}
+	if (nullptr != pVertexShader_)
+	{
+		pVertexShader_->Release();
+		pVertexShader_ = nullptr;
+	}
+	if (nullptr != pCSBlob)
+	{
+		pCSBlob->Release();
+		pCSBlob = nullptr;
+	}
+	if (nullptr != pVSBlob)
+	{
+		pVSBlob->Release();
+		pVSBlob = nullptr;
+	}
+	if (nullptr != pPSBlob)
+	{
+		pPSBlob->Release();
+		pPSBlob = nullptr;
+	}
+	if (nullptr != pGSBlob)
+	{
+		pGSBlob->Release();
+		pGSBlob = nullptr;
 	}
 
-	D3D11_BUFFER_DESC csbd = {};
-	csbd.Usage = D3D11_USAGE_DEFAULT;
-	csbd.ByteWidth = sizeof(ComputeConstantBuffer);
-	csbd.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-	if (FAILED(device->CreateBuffer(&csbd, nullptr, &computeConstantBuffer_)))
+	return false;
+}
+
+bool ParticleSystemGPU::InitConstantBuffer(ID3D11Device* pDevice)
+{
+	D3D11_BUFFER_DESC cDesc = {};
+	cDesc.Usage = D3D11_USAGE_DEFAULT;
+	cDesc.ByteWidth = sizeof(ConstantBuffer);
+	cDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	if (FAILED(pDevice->CreateBuffer(&cDesc, nullptr, &pConstantBuffer_)))
 	{
 		DEBUG_BREAK();
 		return false;
 	}
 
+	D3D11_BUFFER_DESC ccDesc = {};
+	ccDesc.Usage = D3D11_USAGE_DEFAULT;
+	ccDesc.ByteWidth = sizeof(ComputeConstantBuffer);
+	ccDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	if (FAILED(pDevice->CreateBuffer(&ccDesc, nullptr, &pComputeConstantBuffer_)))
+	{
+		DEBUG_BREAK();
+		return false;
+	}
+
+	return true;
+}
+
+bool ParticleSystemGPU::InitBlendState(ID3D11Device* pDevice)
+{
 	D3D11_BLEND_DESC blendDesc = {};
 	blendDesc.AlphaToCoverageEnable = FALSE;
 	blendDesc.IndependentBlendEnable = FALSE;
@@ -194,12 +303,17 @@ bool ParticleSystemGPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11
 	rt0.BlendOpAlpha = D3D11_BLEND_OP_ADD;
 	rt0.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 
-	if (FAILED(device->CreateBlendState(&blendDesc, &blendState_)))
+	if (FAILED(pDevice->CreateBlendState(&blendDesc, &pBlendState_)))
 	{
 		DEBUG_BREAK();
 		return false;
 	}
 
+	return true;
+}
+
+bool ParticleSystemGPU::InitSamplerState(ID3D11Device* pDevice)
+{
 	D3D11_SAMPLER_DESC samplerDesc = {};
 	samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
 	samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
@@ -209,7 +323,7 @@ bool ParticleSystemGPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11
 	samplerDesc.MinLOD = 0;
 	samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 
-	if (FAILED(device->CreateSamplerState(&samplerDesc, &sampler_)))
+	if (FAILED(pDevice->CreateSamplerState(&samplerDesc, &pSamplerState_)))
 	{
 		DEBUG_BREAK();
 		return false;
@@ -218,134 +332,68 @@ bool ParticleSystemGPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11
 	return true;
 }
 
-void ParticleSystemGPU::Update(ID3D11DeviceContext* ctx, float delta)
-{
-	ComputeConstantBuffer cs = {};
-	cs.delta_ = delta;
-	cs.maxParticles_ = (UINT)maxParticles_;
-	cs.time_ = gTimeAcc_;
-	cs.spawnMode_ = gGpuPatternMode_; // 0 : Æø¹ß, 1 : ºÐ¼ö
-
-	ctx->UpdateSubresource(computeConstantBuffer_, 0, nullptr, &cs, 0, 0);
-
-	ctx->CSSetShader(computeShader_, nullptr, 0);
-	ctx->CSSetConstantBuffers(1, 1, &computeConstantBuffer_);
-	ctx->CSSetUnorderedAccessViews(0, 1, &particleUAV_, nullptr);
-
-	UINT groupCount = (maxParticles_ + 255) / 256;
-	ctx->Dispatch(groupCount, 1, 1);
-
-	ID3D11UnorderedAccessView* nullUAV = nullptr;
-	ctx->CSSetUnorderedAccessViews(0, 1, &nullUAV, nullptr);
-	ctx->CSSetShader(nullptr, nullptr, 0);
-}
-
-void ParticleSystemGPU::Draw(ID3D11DeviceContext* ctx, const DirectX::XMMATRIX& viewProj, const DirectX::XMFLOAT3& cameraRight, const DirectX::XMFLOAT3& cameraUp)
-{
-	ConstantBuffer cb = {};
-	DirectX::XMStoreFloat4x4(&cb.viewProj_, DirectX::XMMatrixTranspose(viewProj));
-	cb.cameraRight_ = cameraRight;
-	cb.startSize_ = 0.5f;
-	cb.cameraUp_ = cameraUp;
-	cb.endSize_ = 0.1f;
-
-	cb.startColor_ = DirectX::XMFLOAT4(0.1f, 0.6f, 1.0f, 1.0f);
-	cb.endColor_ = DirectX::XMFLOAT4(0.1f, 0.1f, 1.0f, 0.0f);
-
-	ctx->UpdateSubresource(constantBuffer_, 0, nullptr, &cb, 0, 0);
-
-	ctx->IASetInputLayout(nullptr);
-	UINT stride = 0;
-	UINT offset = 0;
-	ID3D11Buffer* nullVB = nullptr;
-	ctx->IASetVertexBuffers(0, 1, &nullVB, &stride, &offset);
-	ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
-
-	ctx->VSSetShader(vertexShader_, nullptr, 0);
-	ctx->GSSetShader(geometryShader_, nullptr, 0);
-	ctx->PSSetShader(pixelShader_, nullptr, 0);
-
-	ctx->PSSetConstantBuffers(0, 1, &constantBuffer_);
-	ctx->GSSetConstantBuffers(0, 1, &constantBuffer_);
-
-	ctx->VSSetShaderResources(1, 1, &particleSRV_);
-
-	ctx->PSSetShaderResources(0, 1, &particleTexSRV_);
-	ctx->PSSetSamplers(0, 1, &sampler_);
-
-	float blendFactor[4] = { 0, 0, 0, 0 };
-	UINT samplerMask = 0xffffffff;
-	ctx->OMSetBlendState(blendState_, blendFactor, samplerMask);
-
-	ctx->Draw(maxParticles_, 0);
-
-	ctx->GSSetShader(nullptr, nullptr, 0);
-
-	ID3D11ShaderResourceView* nullSRV[2] = { nullptr, nullptr };
-	ctx->VSSetShaderResources(1, 1, nullSRV);
-}
-
-
 void ParticleSystemGPU::CleanUp()
 {
-	if (particleBuffer_)
+	if (nullptr != pParticleTextureSRV_)
 	{
-		particleBuffer_->Release();
-		particleBuffer_ = nullptr;
+		pParticleTextureSRV_->Release();
+		pParticleTextureSRV_ = nullptr;
 	}
-	if (particleSRV_)
+	if (nullptr != pParticleUAV_)
 	{
-		particleSRV_->Release();
-		particleSRV_ = nullptr;
+		pParticleUAV_->Release();
+		pParticleUAV_ = nullptr;
 	}
-	if (particleUAV_)
+	if (nullptr != pParticleSRV_)
 	{
-		particleUAV_->Release();
-		particleUAV_ = nullptr;
+		pParticleSRV_->Release();
+		pParticleSRV_ = nullptr;
 	}
-	if (vertexShader_)
+	if (nullptr != pSamplerState_)
 	{
-		vertexShader_->Release();
-		vertexShader_ = nullptr;
+		pSamplerState_->Release();
+		pSamplerState_ = nullptr;
 	}
-	if (geometryShader_)
+	if (nullptr != pBlendState_)
 	{
-		geometryShader_->Release();
-		geometryShader_ = nullptr;
+		pBlendState_->Release();
+		pBlendState_ = nullptr;
 	}
-	if (pixelShader_)
+	if (nullptr != pComputeConstantBuffer_)
 	{
-		pixelShader_->Release();
-		pixelShader_ = nullptr;
+		pComputeConstantBuffer_->Release();
+		pComputeConstantBuffer_ = nullptr;
 	}
-	if (computeShader_)
+	if (nullptr != pConstantBuffer_)
 	{
-		computeShader_->Release();
-		computeShader_ = nullptr;
+		pConstantBuffer_->Release();
+		pConstantBuffer_ = nullptr;
 	}
-	if (constantBuffer_)
+	if (nullptr != pComputeShader_)
 	{
-		constantBuffer_->Release();
-		constantBuffer_ = nullptr;
+		pComputeShader_->Release();
+		pComputeShader_ = nullptr;
 	}
-	if (computeConstantBuffer_)
+	if (nullptr != pPixelShader_)
 	{
-		computeConstantBuffer_->Release();
-		computeConstantBuffer_ = nullptr;
+		pPixelShader_->Release();
+		pPixelShader_ = nullptr;
 	}
-	if (sampler_)
+	if (nullptr != pGeometryShader_)
 	{
-		sampler_->Release();
-		sampler_ = nullptr;
+		pGeometryShader_->Release();
+		pGeometryShader_ = nullptr;
 	}
-	if (blendState_)
+
+	if (nullptr != pVertexShader_)
 	{
-		blendState_->Release();
-		blendState_ = nullptr;
+		pVertexShader_->Release();
+		pVertexShader_ = nullptr;
 	}
-	if (particleTexSRV_)
+
+	if (nullptr != pParticleBuffer_)
 	{
-		particleTexSRV_->Release();
-		particleTexSRV_ = nullptr;
+		pParticleBuffer_->Release();
+		pParticleBuffer_ = nullptr;
 	}
 }

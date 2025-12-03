@@ -6,18 +6,11 @@
 #define	ResolutionHeigh 1440.0f
 
 #define USE_GPU_PARTICLES 1 // 0: CPU / 1: GPU
-#define GPU_PARTICLE_PATTERN_MODE 0 // 0: 폭발 1: 분수
+#define GPU_PARTICLE_PATTERN_MODE 1 // 0: 폭발 1: 분수
 
-#if USE_GPU_PARTICLES
-ParticleSystemGPU* g_ParticleGPU = nullptr;
-#else
-ParticleSystemCPU* g_ParticleCPU = nullptr;
-#endif;
-ID3D11ShaderResourceView* g_ParticleTexSRV = nullptr;
 
 LARGE_INTEGER g_Freq;
-LARGE_INTEGER g_PrevTime;	
-
+LARGE_INTEGER g_PrevTime;
 
 // Init
 ID3D11Device* g_pd3dDevice = nullptr;
@@ -25,6 +18,17 @@ ID3D11DeviceContext* g_pImmediateContext = nullptr; // Device Context
 IDXGISwapChain* g_pSwapChain = nullptr; // 스왑 체인
 ID3D11RenderTargetView* g_pRenderTargetView = nullptr; // 렌더 타켓 뷰
 ID3D11DepthStencilView* g_pDepthStencilView = nullptr; // 깊이 스텐실 뷰
+
+#if USE_GPU_PARTICLES
+ParticleSystemGPU* g_pParticleSystemGPU = nullptr;
+#else
+ParticleSystemCPU* g_pParticleSystemCPU = nullptr;
+#endif;
+
+
+ID3D11ShaderResourceView* g_pTextureResourceView = nullptr;
+ID3D11ShaderResourceView* g_pParticleTexSRV = nullptr;
+
 
 // ------------------------- Functions ------------------------------------- //
 IDXGIAdapter* GetBestAdapter()
@@ -66,17 +70,10 @@ IDXGIAdapter* GetBestAdapter()
 
 HRESULT InitDeviceAndSwapChain(HWND hWnd, IDXGIAdapter* pBestAdapter)
 {
-	//UINT m4xMsaaQuality;
-	//HRESULT hr = g_pd3dDevice->CheckMultisampleQualityLevels(DXGI_FORMAT_R8G8B8A8_UNORM, 4, &m4xMsaaQuality);
-	//if (!(m4xMsaaQuality > 0))
-	//{
-	//	DEBUG_BREAK();
-	//}
-
 	// 스왑 체인 구조체를 초기화 해야 함
-	DXGI_SWAP_CHAIN_DESC sd = {};
+	DXGI_SWAP_CHAIN_DESC sd;
+	memset(&sd, 0x00, sizeof(sd));
 	sd.BufferCount = 1; // 백 버퍼의 수
-	//sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD; // 사용할려면 BufferCount 2로 올려야함.
 	sd.BufferDesc.Width = ResolutionWidth; // 백 버퍼의 너비
 	sd.BufferDesc.Height = ResolutionHeigh; // 백 버퍼의 높이
 	sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM; // 백 버퍼의 포맷
@@ -84,38 +81,22 @@ HRESULT InitDeviceAndSwapChain(HWND hWnd, IDXGIAdapter* pBestAdapter)
 	sd.BufferDesc.RefreshRate.Denominator = 1; // 화면 새로 고침 빈도 ( 분모 )
 	sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT; // 백 버퍼의 용도
 	sd.OutputWindow = hWnd; // 렌더링 할 윈도우 핸들
-	sd.SampleDesc.Count = 1; // 멀티샘플링 수 // Count를 1로하고 Quality를 0으로하면 멀티 샘플링을 하지 않는다는 뜻
+	sd.SampleDesc.Count = 1; // 멀티샘플링 수
 	sd.SampleDesc.Quality = 0; // 멀티샘플링 품질
 	sd.Windowed = TRUE; // 창 모드 인지 아닌지.
-	sd.Flags = 0;
-
-	UINT createDeviceFlags = 0;
-#ifdef _DEBUG
-	createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
-#endif
-
-	// 현재 하드웨어가 D3D 기능들을 어디까지 지원할수있을지 체크.
-	// 만약 지원하지 못한다면 D3D11CreateDeviceAndSwapChain에서 Fail이 발생.
-	D3D_FEATURE_LEVEL featureLevels[] =
-	{
-		D3D_FEATURE_LEVEL_11_0,
-		D3D_FEATURE_LEVEL_10_0
-	};
-
-	D3D_FEATURE_LEVEL featureLevel;
 
 	HRESULT hr = D3D11CreateDeviceAndSwapChain(
 		pBestAdapter,
-		D3D_DRIVER_TYPE_UNKNOWN,	 // 하드웨어(BestAdapter) 직접 선택 할 시 사용.
+		D3D_DRIVER_TYPE_UNKNOWN,
 		nullptr,
-		createDeviceFlags,
-		featureLevels,
-		2,
+		0,
+		nullptr,
+		0,
 		D3D11_SDK_VERSION,
 		&sd,
 		&g_pSwapChain,
 		&g_pd3dDevice,
-		&featureLevel,
+		nullptr,
 		&g_pImmediateContext
 	);
 
@@ -210,9 +191,11 @@ HRESULT SetViewPort()
 	return S_OK;
 }
 
-void SetRenderTarget()
+HRESULT SetRenderTarget()
 {
 	g_pImmediateContext->OMSetRenderTargets(1, &g_pRenderTargetView, g_pDepthStencilView);
+
+	return S_OK;
 }
 
 HRESULT InitD3D(HWND hWnd)
@@ -224,16 +207,137 @@ HRESULT InitD3D(HWND hWnd)
 		return E_FAIL;
 	}
 
-	InitDeviceAndSwapChain(hWnd, pBestAdapter);
+	if (FAILED(InitDeviceAndSwapChain(hWnd, pBestAdapter)))
+	{
+		DEBUG_BREAK();
+		return S_FALSE;
+	}
 
-	InitRenderTargetView();
+	if (FAILED(InitRenderTargetView()))
+	{
+		DEBUG_BREAK();
+		return S_FALSE;
+	}
 
-	InitDepthStencilBuffer();
+	if (FAILED(InitDepthStencilBuffer()))
+	{
+		DEBUG_BREAK();
+		return S_FALSE;
+	}
 
-	SetViewPort();
+	if (FAILED(InitDepthStencilBuffer()))
+	{
+		DEBUG_BREAK();
+		return S_FALSE;
+	}
+	if (FAILED(SetViewPort()))
+	{
+		DEBUG_BREAK();
+		return S_FALSE;
+	}
 
-	SetRenderTarget();
+	if (FAILED(SetRenderTarget()))
+	{
+		DEBUG_BREAK();
+		return S_FALSE;
+	}
 	return S_OK;
+}
+
+HRESULT LoadTextureWithDirectXTex(ID3D11Device* device, const wchar_t* fileName, bool isNormalMap, ID3D11ShaderResourceView** outSRV)
+{
+	DirectX::TexMetadata metadata;
+	DirectX::ScratchImage scratchImg;
+	HRESULT hr = DirectX::LoadFromWICFile(fileName, DirectX::WIC_FLAGS_NONE, &metadata, scratchImg);
+	if (FAILED(hr))
+	{
+		hr = DirectX::LoadFromDDSFile(fileName, DirectX::DDS_FLAGS_NONE, &metadata, scratchImg);
+		if (FAILED(hr))
+		{
+			DEBUG_BREAK();
+			return hr;
+		}
+	}
+	const DirectX::Image* pImg = scratchImg.GetImage(0, 0, 0);
+
+	DirectX::ScratchImage convImg;
+	if (isNormalMap)
+	{
+		// Normal Map → UNORM (Linear)
+		if (metadata.format != DXGI_FORMAT_R8G8B8A8_UNORM)
+		{
+			hr = DirectX::Convert(
+				pImg, 1, metadata,
+				DXGI_FORMAT_R8G8B8A8_UNORM,
+				DirectX::TEX_FILTER_DEFAULT,
+				DirectX::TEX_THRESHOLD_DEFAULT,
+				convImg
+			);
+			if (FAILED(hr)) return hr;
+
+			pImg = convImg.GetImage(0, 0, 0);
+			metadata.format = DXGI_FORMAT_R8G8B8A8_UNORM;
+		}
+	}
+	else
+	{
+		if (metadata.format != DXGI_FORMAT_R8G8B8A8_UNORM_SRGB)
+		{
+			hr = DirectX::Convert(
+				pImg, 1, metadata,
+				DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
+				DirectX::TEX_FILTER_DEFAULT,
+				DirectX::TEX_THRESHOLD_DEFAULT,
+				convImg
+			);
+			if (FAILED(hr)) return hr;
+
+			pImg = convImg.GetImage(0, 0, 0);
+			metadata.format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+		}
+	}
+
+	ID3D11Texture2D* pTexture = nullptr;
+	hr = DirectX::CreateTexture(device, pImg, 1, metadata, (ID3D11Resource**)&pTexture);
+	if (FAILED(hr))
+	{
+		DEBUG_BREAK();
+		return hr;
+	}
+
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+	srvDesc.Format = metadata.format;
+	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MipLevels = (UINT)metadata.mipLevels;
+	srvDesc.Texture2D.MostDetailedMip = 0;
+
+	hr = device->CreateShaderResourceView(pTexture, &srvDesc, outSRV);
+	pTexture->Release();
+	if (FAILED(hr))
+	{
+		DEBUG_BREAK();
+		return hr;
+	}
+
+	return S_OK;
+}
+
+HRESULT InitTexture()
+{
+	const wchar_t* textureFile = L"../../Resource/Bricks_2K/Bricks_Color.png";
+	//const wchar_t* textureFile = L"../../Resource/Bricks_4K/Bricks_Color.png";
+	//const wchar_t* textureFile = L"../../Resource/Stones_2K/Stones_Color.png";
+	//const wchar_t* textureFile = L"../../Resource/Stones_4K/Stones_Color.png";
+	//const wchar_t* textureFile = L"../../Resource/Ragnarok_Online_Acolyte.png";
+	//const wchar_t* textureFile = L"../../Resource/BrickTexture.jpg";
+	HRESULT hr = LoadTextureWithDirectXTex(g_pd3dDevice, textureFile, false, &g_pTextureResourceView);
+	if (FAILED(hr))
+	{
+		DEBUG_BREAK();
+		return hr;
+	}
+
+	return hr;
 }
 
 ID3D11ShaderResourceView* CreateWhiteTextureSRV(ID3D11Device* device)
@@ -257,15 +361,18 @@ ID3D11ShaderResourceView* CreateWhiteTextureSRV(ID3D11Device* device)
 	ID3D11Texture2D* tex = nullptr;
 	if (FAILED(device->CreateTexture2D(&td, &initData, &tex)))
 	{
+		DEBUG_BREAK();
 		return nullptr;
 	}
 
 	ID3D11ShaderResourceView* srv = nullptr;
 	if (FAILED(device->CreateShaderResourceView(tex, nullptr, &srv)))
 	{
+		DEBUG_BREAK();
 		tex->Release();
 		return nullptr;
 	}
+
 	tex->Release();
 	return srv;
 }
@@ -275,37 +382,55 @@ void BeginPlay()
 	QueryPerformanceFrequency(&g_Freq);
 	QueryPerformanceCounter(&g_PrevTime);
 
-
-	g_ParticleTexSRV = CreateWhiteTextureSRV(g_pd3dDevice);
-	const int maxParticles = 10000;
+	g_pParticleTexSRV = CreateWhiteTextureSRV(g_pd3dDevice);
+	const int maxParticleNum = 10000;
 
 #if USE_GPU_PARTICLES
-	g_ParticleGPU = new ParticleSystemGPU;
+	g_pParticleSystemGPU = new ParticleSystemGPU;
 	ParticleSystemGPU::gGpuPatternMode_ = GPU_PARTICLE_PATTERN_MODE;
-	if (false == g_ParticleGPU->Initialize(g_pd3dDevice, maxParticles, g_ParticleTexSRV))
+	if (false == g_pParticleSystemGPU->Init(g_pd3dDevice, maxParticleNum, g_pParticleTexSRV))
 	{
-		if (nullptr != g_ParticleTexSRV)
+		if (nullptr != g_pParticleSystemGPU)
 		{
-			g_ParticleTexSRV->Release();
+			g_pParticleTexSRV->Release();
 		}
 
 		DEBUG_BREAK();
 		return;
 	}
 #else
-	g_ParticleCPU = new ParticleSystemCPU;
-	if (false == g_ParticleCPU->Initialize(g_pd3dDevice, maxParticles, g_ParticleTexSRV))
+	g_pParticleSystemCPU = new ParticleSystemCPU;
+	if (false == g_pParticleSystemCPU->Init(g_pd3dDevice, maxParticleNum, g_pParticleTexSRV))
 	{
-		if (nullptr != g_ParticleTexSRV)
+		if (nullptr != g_pParticleTexSRV)
 		{
-			g_ParticleTexSRV->Release();
+			g_pParticleTexSRV->Release();
 		}
 
 		DEBUG_BREAK();
 		return;
 	}
 #endif;
+}
 
+void Tick()
+{
+	LARGE_INTEGER now;
+	QueryPerformanceCounter(&now);
+	float dt = float(now.QuadPart - g_PrevTime.QuadPart) / float(g_Freq.QuadPart);
+	g_PrevTime = now;
+	if (dt > 0.033f)
+	{
+		dt = 0.033f;
+	}
+
+
+#if USE_GPU_PARTICLES
+	ParticleSystemGPU::gTimeAcc_ += dt;
+	g_pParticleSystemGPU->Tick(g_pImmediateContext, dt);
+#else
+	g_pParticleSystemCPU->Tick(g_pImmediateContext, dt);
+#endif;
 }
 
 void RenderBegin()
@@ -317,15 +442,6 @@ void RenderBegin()
 
 void Render()
 {
-	LARGE_INTEGER now;
-	QueryPerformanceCounter(&now);
-	float dt = float(now.QuadPart - g_PrevTime.QuadPart) / float(g_Freq.QuadPart);
-	g_PrevTime = now;
-	if (dt > 0.033f)
-	{
-		dt = 0.033f;
-	}
-
 	DirectX::XMVECTOR eye = DirectX::XMVectorSet(0.0f, 0.0f, -10.0f, 1.0f);
 	DirectX::XMVECTOR at = DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
 	DirectX::XMVECTOR up = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
@@ -342,14 +458,10 @@ void Render()
 
 
 #if USE_GPU_PARTICLES
-	ParticleSystemGPU::gTimeAcc_ += dt;
-	g_ParticleGPU->Update(g_pImmediateContext, dt);
-	g_ParticleGPU->Draw(g_pImmediateContext, viewProj, cameraRight, cameraUp);
+	g_pParticleSystemGPU->Render(g_pImmediateContext, viewProj, cameraRight, cameraUp);
 #else
-	g_ParticleCPU->Update(g_pImmediateContext, dt);
-	g_ParticleCPU->Draw(g_pImmediateContext, viewProj, cameraRight, cameraUp);
+	g_pParticleSystemCPU->Render(g_pImmediateContext, viewProj, cameraRight, cameraUp);
 #endif;
-	
 }
 
 void RenderEnd()
@@ -359,19 +471,22 @@ void RenderEnd()
 
 void Cleanup()
 {
-
-#if USE_GPU_PARTICLES
-	if (g_ParticleGPU) delete g_ParticleGPU; g_ParticleGPU = nullptr;
-#else
-	if (g_ParticleCPU) delete g_ParticleCPU; g_ParticleCPU = nullptr;
-#endif;
-	if (g_ParticleTexSRV) g_ParticleTexSRV->Release();
+	if (g_pParticleTexSRV) g_pParticleTexSRV->Release();
+	if (g_pTextureResourceView) g_pTextureResourceView->Release();
 	if (g_pImmediateContext) g_pImmediateContext->ClearState();
 	if (g_pDepthStencilView) g_pDepthStencilView->Release();
 	if (g_pRenderTargetView) g_pRenderTargetView->Release();
 	if (g_pSwapChain) g_pSwapChain->Release();
 	if (g_pImmediateContext) g_pImmediateContext->Release();
 	if (g_pd3dDevice) g_pd3dDevice->Release();
+
+
+#if USE_GPU_PARTICLES
+	if (g_pParticleSystemGPU) delete g_pParticleSystemGPU;
+#else
+	if (g_pParticleSystemCPU) delete g_pParticleSystemCPU;
+#endif;
+
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -439,6 +554,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		}
 		else
 		{
+			Tick();
+
 			RenderBegin();
 
 			Render();

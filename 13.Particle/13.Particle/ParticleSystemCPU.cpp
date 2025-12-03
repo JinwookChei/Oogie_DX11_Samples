@@ -1,23 +1,19 @@
 #include "stdafx.h"
 #include "ParticleSystemCPU.h"
-
-static HRESULT LoadCSO(const wchar_t* filePath, ID3DBlob** ppBlob)
-{
-	return D3DReadFileToBlob(filePath, ppBlob);
-}
+#include "ParticleSystemGPU.h"
 
 ParticleSystemCPU::ParticleSystemCPU()
-	:maxParticles_(0),
-	aliveCount_(0),
-	vertexBuffer_(nullptr),
-	vertexShader_(nullptr),
-	geometryShader_(nullptr),
-	pixelShader_(nullptr),
-	inputLayout_(nullptr),
-	constantBuffer_(nullptr),
-	sampler_(nullptr),
-	blendState_(nullptr),
-	particleTexSRV_(nullptr)
+	: maxParticleCnt_(0)
+	, aliveParticleCnt_(0)
+	, pVertexBuffer_(nullptr)
+	, pInputLayout_(nullptr)
+	, pConstantBuffer_(nullptr)
+	, pVertexShader_(nullptr)
+	, pGeometryShader_(nullptr)
+	, pPixelShader_(nullptr)
+	, pBlendState_(nullptr)
+	, pSamplerState_(nullptr)
+	, pParticleTextureSRV_(nullptr)
 {
 }
 
@@ -26,110 +22,174 @@ ParticleSystemCPU::~ParticleSystemCPU()
 	CleanUp();
 }
 
-bool ParticleSystemCPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11ShaderResourceView* particleTex)
+
+bool ParticleSystemCPU::Init(ID3D11Device* pDevice, unsigned int maxParticleCnt, ID3D11ShaderResourceView* pTextureSRV)
 {
-	maxParticles_ = maxPrticles;
-	particles_.resize(maxParticles_);
-
-	for (ParticleCPU& p : particles_)
+	if (false == InitVertexBuffer(pDevice, maxParticleCnt))
 	{
-		p.position_ = DirectX::XMFLOAT3(0, 0, 0);
-		p.velocity_ = DirectX::XMFLOAT3(0, 0, 0);
-		p.lifeTime_ = 1.0f;
-		p.age_ = 1.0f;
-	}
-
-	particleTexSRV_ = particleTex;
-	particleTexSRV_->AddRef();
-
-	D3D11_BUFFER_DESC vbd = {};
-	vbd.Usage = D3D11_USAGE_DYNAMIC;
-	vbd.ByteWidth = sizeof(ParticleVertexCPU) * maxParticles_;
-	vbd.BindFlags = D3D11_BIND_FLAG::D3D11_BIND_VERTEX_BUFFER;
-	vbd.CPUAccessFlags = D3D11_CPU_ACCESS_FLAG::D3D11_CPU_ACCESS_WRITE;
-
-	if (FAILED(device->CreateBuffer(&vbd, nullptr, &vertexBuffer_)))
-	{
+		DEBUG_BREAK();
 		return false;
 	}
 
-	ID3DBlob* vsBlob = nullptr;
-	ID3DBlob* gsBlob = nullptr;
-	ID3DBlob* psBlob = nullptr;
-
-	if (FAILED(LoadCSO(L"VertexShaderCPU.cso", &vsBlob)))
+	if (false == InitShaders(pDevice))
 	{
-		return false;
-	}
-	if (FAILED(LoadCSO(L"GeometryShader.cso", &gsBlob)))
-	{
-		vsBlob->Release();
-		return false;
-	}
-	if (FAILED(LoadCSO(L"PixelShader.cso", &psBlob)))
-	{
-		vsBlob->Release();
-		gsBlob->Release();
+		DEBUG_BREAK(); 
 		return false;
 	}
 
-	if (FAILED(device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &vertexShader_)))
+	if (false == InitConstantBuffer(pDevice))
 	{
-		vsBlob->Release();
-		gsBlob->Release();
-		psBlob->Release();
+		DEBUG_BREAK();  
 		return false;
 	}
 
-	if (FAILED(device->CreateGeometryShader(gsBlob->GetBufferPointer(), gsBlob->GetBufferSize(), nullptr, &geometryShader_)))
+	if (false == InitBlendState(pDevice))
 	{
-		vsBlob->Release();
-		gsBlob->Release();
-		psBlob->Release();
+		DEBUG_BREAK();  
 		return false;
 	}
 
-	if (FAILED(device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &pixelShader_)))
+	if (false == InitSamplerState(pDevice))
 	{
-		vsBlob->Release();
-		gsBlob->Release();
-		psBlob->Release();
+		DEBUG_BREAK(); 
 		return false;
 	}
 
-	D3D11_INPUT_ELEMENT_DESC layouyDesc[] =
+	if (nullptr == pTextureSRV)
 	{
-		{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
-		{"AGE", 0, DXGI_FORMAT_R32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0}
-	};
-
-	if (FAILED(device->CreateInputLayout(layouyDesc, 2, vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), &inputLayout_)))
-	{
-		vsBlob->Release();
-		gsBlob->Release();
-		psBlob->Release();
+		DEBUG_BREAK(); 
 		return false;
 	}
 
-	vsBlob->Release();
-	gsBlob->Release();
-	psBlob->Release();
+	pParticleTextureSRV_ = pTextureSRV;
+	pParticleTextureSRV_->AddRef();
 
-	D3D11_BUFFER_DESC constantDec = {};
-	constantDec.Usage = D3D11_USAGE_DEFAULT;
-	constantDec.ByteWidth = sizeof(ConstantBuffer);
-	constantDec.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	return true;
+}
 
-	if (FAILED(device->CreateBuffer(&constantDec, nullptr, &constantBuffer_)))
+bool ParticleSystemCPU::InitVertexBuffer(ID3D11Device* pDevice, unsigned int maxParticleCnt)
+{
+	maxParticleCnt_ = maxParticleCnt;
+	particles_.resize(maxParticleCnt_);
+
+	D3D11_BUFFER_DESC desc = {};
+	desc.ByteWidth = maxParticleCnt_ * sizeof(ParticleVertexCPU);
+	desc.Usage = D3D11_USAGE::D3D11_USAGE_DYNAMIC;
+	desc.BindFlags = D3D11_BIND_FLAG::D3D11_BIND_VERTEX_BUFFER;
+	desc.CPUAccessFlags = D3D11_CPU_ACCESS_FLAG::D3D11_CPU_ACCESS_WRITE;
+	//desc.MiscFlags;
+	//desc.StructureByteStride;
+
+	//D3D11_SUBRESOURCE_DATA data = {};
+	//data.pSysMem = particles_.data();
+	//data.SysMemPitch;
+	//data.SysMemSlicePitch;
+
+	if (FAILED(pDevice->CreateBuffer(&desc, nullptr, &pVertexBuffer_)))
 	{
+		DEBUG_BREAK();
+		CleanUp();
 		return false;
 	}
 
-	D3D11_BLEND_DESC blendDesc = {};
-	blendDesc.AlphaToCoverageEnable = FALSE;
-	blendDesc.IndependentBlendEnable = FALSE;
+	return true;
+}
 
-	D3D11_RENDER_TARGET_BLEND_DESC& rt0 = blendDesc.RenderTarget[0];
+bool ParticleSystemCPU::InitShaders(ID3D11Device* pDevice)
+{
+	const wchar_t* pVSPath = L"VertexShaderCPU.cso";
+	const wchar_t* pPSPath = L"PixelShader.cso";
+	const wchar_t* pGSPath = L"GeometryShader.cso";
+
+	ID3DBlob* pVSBlob = nullptr;
+	ID3DBlob* pPSBlob = nullptr;
+	ID3DBlob* pGSBlob = nullptr;
+
+	do
+	{
+		if (FAILED(D3DReadFileToBlob(pVSPath, &pVSBlob))) break;
+		if (FAILED(D3DReadFileToBlob(pPSPath, &pPSBlob))) break;
+		if (FAILED(D3DReadFileToBlob(pGSPath, &pGSBlob))) break;
+		if (FAILED(pDevice->CreateVertexShader(pVSBlob->GetBufferPointer(), pVSBlob->GetBufferSize(), nullptr, &pVertexShader_))) break;
+		if (FAILED(pDevice->CreatePixelShader(pPSBlob->GetBufferPointer(), pPSBlob->GetBufferSize(), nullptr, &pPixelShader_))) break;
+		if (FAILED(pDevice->CreateGeometryShader(pGSBlob->GetBufferPointer(), pGSBlob->GetBufferSize(), nullptr, &pGeometryShader_))) break;
+
+		D3D11_INPUT_ELEMENT_DESC inputDesc[] =
+		{
+			{"POSITION", 0, DXGI_FORMAT::DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,	D3D11_INPUT_PER_VERTEX_DATA, 0},
+			{"AGE", 0, DXGI_FORMAT::DXGI_FORMAT_R32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0}
+		};
+		if (FAILED(pDevice->CreateInputLayout(inputDesc, 2, pVSBlob->GetBufferPointer(), pVSBlob->GetBufferSize(), &pInputLayout_))) break;
+
+		return true;
+	} while (true);
+
+
+
+	if (nullptr != pInputLayout_)
+	{
+		pInputLayout_->Release();
+		pInputLayout_ = nullptr;
+	}
+	if (nullptr != pGeometryShader_)
+	{
+		pGeometryShader_->Release();
+		pGeometryShader_ = nullptr;
+	}
+	if (nullptr != pPixelShader_)
+	{
+		pPixelShader_->Release();
+		pPixelShader_ = nullptr;
+	}
+	if (nullptr != pVertexShader_)
+	{
+		pVertexShader_->Release();
+		pVertexShader_ = nullptr;
+	}
+	if (nullptr != pVSBlob)
+	{
+		pVSBlob->Release();
+		pVSBlob = nullptr;
+	}
+	if (nullptr != pPSBlob)
+	{
+		pPSBlob->Release();
+		pPSBlob = nullptr;
+	}
+	if (nullptr != pGSBlob)
+	{
+		pGSBlob->Release();
+		pGSBlob = nullptr;
+	}
+
+	return false;
+}
+bool ParticleSystemCPU::InitConstantBuffer(ID3D11Device* pDevice)
+{
+	D3D11_BUFFER_DESC desc = {};
+	desc.ByteWidth = sizeof(ConstantBuffer);
+	desc.Usage = D3D11_USAGE::D3D11_USAGE_DEFAULT;
+	desc.BindFlags = D3D11_BIND_FLAG::D3D11_BIND_CONSTANT_BUFFER;
+	//desc.CPUAccessFlags;
+	//desc.MiscFlags;	
+	//desc.StructureByteStride;
+
+	HRESULT hr = pDevice->CreateBuffer(&desc, nullptr, &pConstantBuffer_);
+	if (FAILED(hr))
+	{
+		DEBUG_BREAK();
+		return false;
+	}
+
+	return true;
+}
+bool ParticleSystemCPU::InitBlendState(ID3D11Device* pDevice)
+{
+	D3D11_BLEND_DESC desc = {};
+	desc.AlphaToCoverageEnable = FALSE;
+	desc.IndependentBlendEnable = FALSE;
+
+	D3D11_RENDER_TARGET_BLEND_DESC& rt0 = desc.RenderTarget[0];
 	rt0.BlendEnable = TRUE;
 	rt0.SrcBlend = D3D11_BLEND_SRC_ALPHA;
 	rt0.DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
@@ -139,22 +199,30 @@ bool ParticleSystemCPU::Initialize(ID3D11Device* device, int maxPrticles, ID3D11
 	rt0.BlendOpAlpha = D3D11_BLEND_OP_ADD;
 	rt0.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 
-	if (FAILED(device->CreateBlendState(&blendDesc, &blendState_)))
+	if (FAILED(pDevice->CreateBlendState(&desc, &pBlendState_)))
 	{
+		DEBUG_BREAK();
 		return false;
 	}
 
-	D3D11_SAMPLER_DESC samplerDesc = {};
-	samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-	samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
-	samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
-	samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
-	samplerDesc.ComparisonFunc = D3D11_COMPARISON_ALWAYS;
-	samplerDesc.MinLOD = 0;
-	samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+	return true;
+}
+bool ParticleSystemCPU::InitSamplerState(ID3D11Device* pDevice)
+{
+	D3D11_SAMPLER_DESC desc = {};
+	desc.Filter = D3D11_FILTER::D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+	desc.AddressU = D3D11_TEXTURE_ADDRESS_MODE::D3D11_TEXTURE_ADDRESS_CLAMP;
+	desc.AddressV = D3D11_TEXTURE_ADDRESS_MODE::D3D11_TEXTURE_ADDRESS_CLAMP;
+	desc.AddressW = D3D11_TEXTURE_ADDRESS_MODE::D3D11_TEXTURE_ADDRESS_CLAMP;
+	desc.ComparisonFunc = D3D11_COMPARISON_FUNC::D3D11_COMPARISON_ALWAYS;
+	desc.MinLOD = 0;
+	desc.MaxLOD = D3D11_FLOAT32_MAX;
+	//desc.MipLODBias;
+	//desc.MaxAnisotropy;
 
-	if (FAILED(device->CreateSamplerState(&samplerDesc, &sampler_)))
+	if (FAILED(pDevice->CreateSamplerState(&desc, &pSamplerState_)))
 	{
+		DEBUG_BREAK();
 		return false;
 	}
 
@@ -167,20 +235,21 @@ void ParticleSystemCPU::EmitParticle()
 	{
 		if (1.0f <= p.age_)
 		{
-			p.position_ = DirectX::XMFLOAT3(0, 0, 0);
-			p.velocity_ = DirectX::XMFLOAT3(
+			p.pos_ = DirectX::XMFLOAT3(0, 0, 0);
+			p.vel_ = DirectX::XMFLOAT3
+			(
 				(float(rand()) / RAND_MAX - 0.5f) * 2.0f,
 				5.0f + (float(rand()) / RAND_MAX) * 2.0f,
-				(float(rand()) / RAND_MAX - 0.5f) * 2.0f);
-
-			p.lifeTime_ = 2.0f;
+				(float(rand()) / RAND_MAX - 0.5f) * 2.0f
+			);
+			p.lifeTime_ = 1.0f;
 			p.age_ = 0.0f;
 			break;
 		}
 	}
 }
 
-void ParticleSystemCPU::Update(ID3D11DeviceContext* ctx, float delta)
+void ParticleSystemCPU::Tick(ID3D11DeviceContext* pDeviceContext, float deltaTime)
 {
 	EmitParticle();
 
@@ -189,7 +258,7 @@ void ParticleSystemCPU::Update(ID3D11DeviceContext* ctx, float delta)
 		if (p.age_ < 1.0f)
 		{
 			float life = p.lifeTime_;
-			float ageSec = p.age_ * life + delta;
+			float ageSec = p.age_ * life + deltaTime;
 			if (life <= ageSec)
 			{
 				p.age_ = 1.0f;
@@ -197,133 +266,142 @@ void ParticleSystemCPU::Update(ID3D11DeviceContext* ctx, float delta)
 			else
 			{
 				p.age_ = ageSec / life;
-				p.position_.x += p.velocity_.x * delta;
-				p.position_.y += p.velocity_.y * delta;
-				p.position_.z += p.velocity_.z * delta;
+				p.pos_.x += p.vel_.x * deltaTime;
+				p.pos_.y += p.vel_.y * deltaTime;
+				p.pos_.z += p.vel_.z * deltaTime;
 
-				p.velocity_.y -= 9.8f * 0.5f * delta;
+				p.vel_.y -= 9.8f * 0.5f * deltaTime;
 			}
 		}
 	}
 
 	std::vector<ParticleVertexCPU> verts;
-	verts.reserve(maxParticles_);
+	verts.reserve(aliveParticleCnt_);
 
 	for (ParticleCPU& p : particles_)
 	{
 		if (p.age_ < 1.0f)
 		{
 			ParticleVertexCPU newVert;
-			newVert.position_ = p.position_;
+			newVert.pos_ = p.pos_;
 			newVert.age_ = p.age_;
 			verts.push_back(newVert);
 		}
 	}
 
-	aliveCount_ = (unsigned int)verts.size();
-
-	if (0 == aliveCount_)
+	aliveParticleCnt_ = (unsigned int)verts.size();
+	if (0 == aliveParticleCnt_)
 	{
 		return;
 	}
 
 	D3D11_MAPPED_SUBRESOURCE mapped;
-	if (SUCCEEDED(ctx->Map(vertexBuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
+	if (SUCCEEDED(pDeviceContext->Map(pVertexBuffer_, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped)))
 	{
-		memcpy(mapped.pData, verts.data(), sizeof(ParticleVertexCPU) * aliveCount_);
-		ctx->Unmap(vertexBuffer_, 0);
+		memcpy(mapped.pData, verts.data(), sizeof(ParticleVertexCPU) * aliveParticleCnt_);
+		pDeviceContext->Unmap(pVertexBuffer_, 0);
 	}
 }
 
-void ParticleSystemCPU::Draw(ID3D11DeviceContext* ctx, const DirectX::XMMATRIX& viewProj, const DirectX::XMFLOAT3& cameraRight, const DirectX::XMFLOAT3& cameraUp)
+void ParticleSystemCPU::Render
+(
+	ID3D11DeviceContext* pDeviceContext,
+	const DirectX::XMMATRIX& viewProj,
+	const DirectX::XMFLOAT3& cameraRight,
+	const DirectX::XMFLOAT3& cameraUp
+)
 {
-	if (0 == aliveCount_)
+	if (0 == aliveParticleCnt_)
 	{
 		return;
 	}
 
-	ConstantBuffer cb;
+	ConstantBuffer cb = {};
 	DirectX::XMStoreFloat4x4(&cb.viewProj_, DirectX::XMMatrixTranspose(viewProj));
 	cb.cameraRight_ = cameraRight;
 	cb.startSize_ = 0.5f;
 	cb.cameraUp_ = cameraUp;
 	cb.endSize_ = 0.1f;
-
 	cb.startColor_ = DirectX::XMFLOAT4(0.5f, 0.5f, 0.0f, 1.0f);
 	cb.endColor_ = DirectX::XMFLOAT4(0.1f, 0.5f, 0.0f, 1.0f);
+	pDeviceContext->UpdateSubresource(pConstantBuffer_, 0, nullptr, &cb, 0, 0);
 
-	ctx->UpdateSubresource(constantBuffer_, 0, nullptr, &cb, 0, 0);
 
 	UINT stirde = sizeof(ParticleVertexCPU);
 	UINT offset = 0;
-	ctx->IASetInputLayout(inputLayout_);
-	ctx->IASetVertexBuffers(0, 1, &vertexBuffer_, &stirde, &offset);
-	ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
+	pDeviceContext->IASetInputLayout(pInputLayout_);
+	pDeviceContext->IASetVertexBuffers(0, 1, &pVertexBuffer_, &stirde, &offset);
+	pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
 
-	ctx->VSSetShader(vertexShader_, nullptr, 0);
-	ctx->GSSetShader(geometryShader_, nullptr, 0);
-	ctx->PSSetShader(pixelShader_, nullptr, 0);
+	pDeviceContext->VSSetShader(pVertexShader_, nullptr, 0);
 
-	ctx->PSSetConstantBuffers(0, 1, &constantBuffer_);
-	ctx->GSSetConstantBuffers(0, 1, &constantBuffer_);
+	pDeviceContext->GSSetShader(pGeometryShader_, nullptr, 0);
+	pDeviceContext->GSSetConstantBuffers(0, 1, &pConstantBuffer_);
 
-	ctx->PSSetShaderResources(0, 1, &particleTexSRV_);
-	ctx->PSSetSamplers(0, 1, &sampler_);
+	pDeviceContext->PSSetShader(pPixelShader_, nullptr, 0);
+	pDeviceContext->PSSetConstantBuffers(0, 1, &pConstantBuffer_);
+	pDeviceContext->PSSetShaderResources(0, 1, &pParticleTextureSRV_);
+	pDeviceContext->PSSetSamplers(0, 1, &pSamplerState_);
 
 	float blendFactor[4] = { 0, 0, 0, 0 };
 	UINT samplerMask = 0xffffffff;
-	ctx->OMSetBlendState(blendState_, blendFactor, samplerMask);
+	pDeviceContext->OMSetBlendState(pBlendState_, blendFactor, samplerMask);
 
-	ctx->Draw(aliveCount_, 0);
+	pDeviceContext->Draw(aliveParticleCnt_, 0);
 
-	ctx->GSSetShader(nullptr, nullptr, 0);
+	pDeviceContext->GSSetShader(nullptr, nullptr, 0);
 }
+
 
 void ParticleSystemCPU::CleanUp()
 {
-	if (vertexBuffer_)
+	if (nullptr != pParticleTextureSRV_)
 	{
-		vertexBuffer_->Release();
-		vertexBuffer_ = nullptr;
+		pParticleTextureSRV_->Release();
+		pParticleTextureSRV_ = nullptr;
 	}
-	if (vertexShader_)
+	if (nullptr != pSamplerState_)
 	{
-		vertexShader_->Release();
-		vertexShader_ = nullptr;
+		pSamplerState_->Release();
+		pSamplerState_ = nullptr;
 	}
-	if (geometryShader_)
+	if (nullptr != pBlendState_)
 	{
-		geometryShader_->Release();
-		geometryShader_ = nullptr;
+		pBlendState_->Release();
+		pBlendState_ = nullptr;
 	}
-	if (pixelShader_)
+	if (nullptr != pPixelShader_)
 	{
-		pixelShader_->Release();
-		pixelShader_ = nullptr;
+		pPixelShader_->Release();
+		pPixelShader_ = nullptr;
 	}
-	if (inputLayout_)
+	if (nullptr != pGeometryShader_)
 	{
-		inputLayout_->Release();
-		inputLayout_ = nullptr;
+		pGeometryShader_->Release();
+		pGeometryShader_ = nullptr;
 	}
-	if (constantBuffer_)
+	if (nullptr != pVertexShader_)
 	{
-		constantBuffer_->Release();
-		constantBuffer_ = nullptr;
+		pVertexShader_->Release();
+		pVertexShader_ = nullptr;
 	}
-	if (sampler_)
+	if (nullptr != pConstantBuffer_)
 	{
-		sampler_->Release();
-		sampler_ = nullptr;
+		pConstantBuffer_->Release();
+		pConstantBuffer_ = nullptr;
 	}
-	if (blendState_)
+	if (nullptr != pInputLayout_)
 	{
-		blendState_->Release();
-		blendState_ = nullptr;
+		pInputLayout_->Release();
+		pInputLayout_ = nullptr;
 	}
-	if (particleTexSRV_)
+	if (nullptr != pVertexBuffer_)
 	{
-		particleTexSRV_->Release();
-		particleTexSRV_ = nullptr;
+		pVertexBuffer_->Release();
+		pVertexBuffer_ = nullptr;
 	}
 }
+
+
+
+

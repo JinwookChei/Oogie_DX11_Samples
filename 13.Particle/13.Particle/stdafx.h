@@ -18,6 +18,6 @@
 #define DEBUG_BREAK
 #endif // DEBUG
 
+#include "Defines.h"
 #include "VectorType.h"
 #include "Transform.h"
-#include "Define.h"

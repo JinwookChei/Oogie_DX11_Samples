@@ -24,6 +24,7 @@ struct GS_OUTPUT
     float age : AGE;
 };
 
+
 [maxvertexcount(4)]
 void main(point VS_OUTPUT input[1], inout TriangleStream<GS_OUTPUT> output)
 {
