@@ -20,8 +20,8 @@ struct ComputeConstantBuffer
 class ParticleSystemGPU final
 {
 public:
-	static float gTimeAcc_;
-	static int gGpuPatternMode_;
+	float gTimeAcc_;
+	int gGpuPatternMode_;
 
 	ParticleSystemGPU();
 	~ParticleSystemGPU();
@@ -44,7 +44,6 @@ private:
 	bool InitSamplerState(ID3D11Device* pDevice);
 
 	void CleanUp();
-
 
 	unsigned int maxParticleCnt_;
 

@@ -9,6 +9,7 @@
 #define GPU_PARTICLE_PATTERN_MODE 1 // 0: 폭발 1: 분수
 
 
+
 LARGE_INTEGER g_Freq;
 LARGE_INTEGER g_PrevTime;
 
@@ -18,6 +19,7 @@ ID3D11DeviceContext* g_pImmediateContext = nullptr; // Device Context
 IDXGISwapChain* g_pSwapChain = nullptr; // 스왑 체인
 ID3D11RenderTargetView* g_pRenderTargetView = nullptr; // 렌더 타켓 뷰
 ID3D11DepthStencilView* g_pDepthStencilView = nullptr; // 깊이 스텐실 뷰
+ID3D11DepthStencilState* g_pDepthStencilState = nullptr;
 
 #if USE_GPU_PARTICLES
 ParticleSystemGPU* g_pParticleSystemGPU = nullptr;
@@ -165,6 +167,17 @@ HRESULT InitDepthStencilBuffer()
 		return hr;
 	}
 
+	D3D11_DEPTH_STENCIL_DESC depthStencilDesc;
+	depthStencilDesc.DepthEnable = TRUE;
+	depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK::D3D11_DEPTH_WRITE_MASK_ZERO;
+	depthStencilDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
+	depthStencilDesc.StencilEnable = FALSE;
+	g_pd3dDevice->CreateDepthStencilState(&depthStencilDesc, &g_pDepthStencilState);
+
+
+	D3D11_DEPTH_STENCIL_DESC depthDesc;
+	depthDesc.DepthFunc = D3D11_COMPARISON_FUNC::D3D11_COMPARISON_NEVER;
+
 	hr = g_pd3dDevice->CreateDepthStencilView(pDepthStencilBuffer, nullptr, &g_pDepthStencilView);
 	pDepthStencilBuffer->Release();
 	if (FAILED(hr))
@@ -194,6 +207,7 @@ HRESULT SetViewPort()
 HRESULT SetRenderTarget()
 {
 	g_pImmediateContext->OMSetRenderTargets(1, &g_pRenderTargetView, g_pDepthStencilView);
+	g_pImmediateContext->OMSetDepthStencilState(g_pDepthStencilState, 0);
 
 	return S_OK;
 }
@@ -387,7 +401,7 @@ void BeginPlay()
 
 #if USE_GPU_PARTICLES
 	g_pParticleSystemGPU = new ParticleSystemGPU;
-	ParticleSystemGPU::gGpuPatternMode_ = GPU_PARTICLE_PATTERN_MODE;
+	g_pParticleSystemGPU->gGpuPatternMode_ = GPU_PARTICLE_PATTERN_MODE;
 	if (false == g_pParticleSystemGPU->Init(g_pd3dDevice, maxParticleNum, g_pParticleTexSRV))
 	{
 		if (nullptr != g_pParticleSystemGPU)
@@ -426,7 +440,7 @@ void Tick()
 
 
 #if USE_GPU_PARTICLES
-	ParticleSystemGPU::gTimeAcc_ += dt;
+	//ParticleSystemGPU::gTimeAcc_ += dt;
 	g_pParticleSystemGPU->Tick(g_pImmediateContext, dt);
 #else
 	g_pParticleSystemCPU->Tick(g_pImmediateContext, dt);

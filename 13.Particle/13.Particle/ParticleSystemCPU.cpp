@@ -171,7 +171,7 @@ bool ParticleSystemCPU::InitConstantBuffer(ID3D11Device* pDevice)
 	desc.Usage = D3D11_USAGE::D3D11_USAGE_DEFAULT;
 	desc.BindFlags = D3D11_BIND_FLAG::D3D11_BIND_CONSTANT_BUFFER;
 	//desc.CPUAccessFlags;
-	//desc.MiscFlags;	
+	//desc.MiscFlags;
 	//desc.StructureByteStride;
 
 	HRESULT hr = pDevice->CreateBuffer(&desc, nullptr, &pConstantBuffer_);

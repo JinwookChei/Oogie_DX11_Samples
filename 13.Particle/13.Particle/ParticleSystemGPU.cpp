@@ -2,8 +2,8 @@
 #include "ParticleSystemGPU.h"
 
 
-float ParticleSystemGPU::gTimeAcc_ = 0.0f;
-int ParticleSystemGPU::gGpuPatternMode_ = 0;
+//float ParticleSystemGPU::gTimeAcc_ = 0.0f;
+//int ParticleSystemGPU::gGpuPatternMode_ = 0;
 
 ParticleSystemGPU::ParticleSystemGPU()
 	: maxParticleCnt_(0)
@@ -19,6 +19,7 @@ ParticleSystemGPU::ParticleSystemGPU()
 	, pParticleSRV_(nullptr)
 	, pParticleUAV_(nullptr)
 	, pParticleTextureSRV_(nullptr)
+	, gTimeAcc_(0)
 {
 }
 
@@ -73,17 +74,18 @@ bool ParticleSystemGPU::Init(ID3D11Device* pDevice, unsigned int maxParticleCnt,
 
 void ParticleSystemGPU::Tick(ID3D11DeviceContext* pDeviceContext, float deltaTime)
 {
+	gTimeAcc_ += deltaTime;
+
 	ComputeConstantBuffer ccBuffer = {};
 	ccBuffer.deltaTime_ = deltaTime;
 	ccBuffer.maxParticles_ = (UINT)maxParticleCnt_;
 	ccBuffer.time_ = gTimeAcc_;
 	ccBuffer.spawnMode_ = gGpuPatternMode_; // 0 : Æø¹ß, 1 : ºÐ¼ö
-	pDeviceContext->UpdateSubresource(pComputeConstantBuffer_, 0, nullptr, &ccBuffer, 0, 0);
+	pDeviceContext->UpdateSubresource(pComputeConstantBuffer_, 0, nullptr, &ccBuffer, 0, 0);	//
 
-
-	pDeviceContext->CSSetShader(pComputeShader_, nullptr, 0);
-	pDeviceContext->CSSetConstantBuffers(1, 1, &pComputeConstantBuffer_);
-	pDeviceContext->CSSetUnorderedAccessViews(0, 1, &pParticleUAV_, nullptr);
+	pDeviceContext->CSSetShader(pComputeShader_, nullptr, 0);	//
+	pDeviceContext->CSSetConstantBuffers(1, 1, &pComputeConstantBuffer_);	//
+	pDeviceContext->CSSetUnorderedAccessViews(0, 1, &pParticleUAV_, nullptr);	//
 
 	UINT groupCount = (maxParticleCnt_ + 255) / 256;
 	pDeviceContext->Dispatch(groupCount, 1, 1);
@@ -112,14 +114,15 @@ void ParticleSystemGPU::Render(ID3D11DeviceContext* pDeviceContext, const Direct
 	pDeviceContext->IASetVertexBuffers(0, 1, &nullVB, &stride, &offset);
 	pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
 
-	pDeviceContext->VSSetShader(pVertexShader_, nullptr, 0);
-	pDeviceContext->GSSetShader(pGeometryShader_, nullptr, 0);
-	pDeviceContext->PSSetShader(pPixelShader_, nullptr, 0);
+	pDeviceContext->VSSetShader(pVertexShader_, nullptr, 0);		
+	pDeviceContext->GSSetShader(pGeometryShader_, nullptr, 0);		
+	pDeviceContext->PSSetShader(pPixelShader_, nullptr, 0);		
 
 	pDeviceContext->GSSetConstantBuffers(0, 1, &pConstantBuffer_);
 	pDeviceContext->PSSetConstantBuffers(0, 1, &pConstantBuffer_);
 
 	pDeviceContext->VSSetShaderResources(1, 1, &pParticleSRV_);
+
 	pDeviceContext->PSSetShaderResources(0, 1, &pParticleTextureSRV_);
 
 	pDeviceContext->PSSetSamplers(0, 1, &pSamplerState_);
@@ -154,7 +157,7 @@ bool ParticleSystemGPU::InitParticleBuffer(ID3D11Device* pDevice, unsigned int m
 	desc.Usage = D3D11_USAGE::D3D11_USAGE_DEFAULT;
 	desc.BindFlags = D3D11_BIND_FLAG::D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_FLAG::D3D11_BIND_SHADER_RESOURCE;
 	desc.CPUAccessFlags = 0;
-	desc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+	desc.MiscFlags = D3D11_RESOURCE_MISC_FLAG::D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
 	desc.StructureByteStride = sizeof(ParticleGPU);
 
 	D3D11_SUBRESOURCE_DATA data = {};

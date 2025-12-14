@@ -48,11 +48,8 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     }
 
     ParticleData p = gParticlesRW[idx];
-    
     float spawnRate = 60.0f;
-    
     float spawnProb = spawnRate * gDeltaTime / (float) maxParticles;
-    
     if (1 <= p.age)
     {
         if (gSpawnMode == 0)

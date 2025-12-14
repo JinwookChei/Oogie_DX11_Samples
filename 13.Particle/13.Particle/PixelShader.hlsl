@@ -29,5 +29,6 @@ float4 main(GS_OUTPUT input) : SV_TARGET
     float alpha = saturate(1.0f - input.age);
     color.a *= alpha;
 
+   
     return texColor * color;
 }

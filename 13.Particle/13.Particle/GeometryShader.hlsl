@@ -31,6 +31,11 @@ void main(point VS_OUTPUT input[1], inout TriangleStream<GS_OUTPUT> output)
     float3 pos = input[0].pos;
     float age = input[0].age;
     
+    if(age >= 1.0f)
+    {
+        return;
+    }
+    
     float size = lerp(gStartSize, gEndSize, age);
     
     float3 right = normalize(gCameraRight) * size * 0.5f;
