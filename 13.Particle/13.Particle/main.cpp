@@ -138,7 +138,7 @@ HRESULT InitRenderTargetView()
 HRESULT InitDepthStencilBuffer()
 {
 	// Depth Stencil Buffer
-	D3D11_TEXTURE2D_DESC Desc;
+	D3D11_TEXTURE2D_DESC Desc = {};
 	Desc.Width = ResolutionWidth;
 	Desc.Height = ResolutionHeigh;
 	Desc.MipLevels = 1;
@@ -167,19 +167,20 @@ HRESULT InitDepthStencilBuffer()
 		return hr;
 	}
 
+	hr = g_pd3dDevice->CreateDepthStencilView(pDepthStencilBuffer, nullptr, &g_pDepthStencilView);
+	pDepthStencilBuffer->Release();
+	if (FAILED(hr))
+	{
+		DEBUG_BREAK();
+		return hr;
+	}
+
 	D3D11_DEPTH_STENCIL_DESC depthStencilDesc;
 	depthStencilDesc.DepthEnable = TRUE;
 	depthStencilDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK::D3D11_DEPTH_WRITE_MASK_ZERO;
 	depthStencilDesc.DepthFunc = D3D11_COMPARISON_LESS_EQUAL;
 	depthStencilDesc.StencilEnable = FALSE;
-	g_pd3dDevice->CreateDepthStencilState(&depthStencilDesc, &g_pDepthStencilState);
-
-
-	D3D11_DEPTH_STENCIL_DESC depthDesc;
-	depthDesc.DepthFunc = D3D11_COMPARISON_FUNC::D3D11_COMPARISON_NEVER;
-
-	hr = g_pd3dDevice->CreateDepthStencilView(pDepthStencilBuffer, nullptr, &g_pDepthStencilView);
-	pDepthStencilBuffer->Release();
+	hr = g_pd3dDevice->CreateDepthStencilState(&depthStencilDesc, &g_pDepthStencilState);
 	if (FAILED(hr))
 	{
 		DEBUG_BREAK();
