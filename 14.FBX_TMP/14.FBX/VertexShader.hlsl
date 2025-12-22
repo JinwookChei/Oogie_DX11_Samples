@@ -36,8 +36,8 @@ PS_INPUT main(VS_INPUT input)
 {
     PS_INPUT output = (PS_INPUT) 0;
     
-    float4 worldPosition = mul(float4(input.position, 1.0f), World);
-    float4 viewPosition = mul(worldPosition, View);
+    float4 worldPosition = mul(float4(input.position, 1.0f), World); 
+    float4 viewPosition = mul(worldPosition, View); 
     output.position = mul(viewPosition, Projection);
     output.color = input.color;
     
