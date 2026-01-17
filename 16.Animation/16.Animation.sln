@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.14.36408.4 d17.14
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "14.FBX", "14.FBX\14.FBX.vcxproj", "{4A225594-1BA0-45C4-B8C3-B410DBAFB1EB}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "16.Animation", "16.Animation\16.Animation.vcxproj", "{4A225594-1BA0-45C4-B8C3-B410DBAFB1EB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

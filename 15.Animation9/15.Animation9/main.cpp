@@ -11,16 +11,24 @@ IDXGISwapChain* g_pSwapChain = nullptr; // 스왑 체인
 ID3D11RenderTargetView* g_pRenderTargetView = nullptr; // 렌더 타켓 뷰
 ID3D11DepthStencilView* g_pDepthStencilView = nullptr; // 깊이 스텐실 뷰
 
+// Render
+ID3D11InputLayout* g_pInputLayout = nullptr;
+ID3D11Buffer* g_pConstantBuffer;
+ID3D11Buffer* g_pAnimationBuffer;
+ID3D11VertexShader* g_pVertexShader = nullptr;
+ID3D11PixelShader* g_pPixelShader = nullptr;
 
-// Mesh
-struct SimpleVertex 
-{
-	DirectX::XMFLOAT3 position;
-	DirectX::XMFLOAT4 color;
-	DirectX::XMFLOAT4 normal;
-	DirectX::XMFLOAT4 tangent;
-	DirectX::XMFLOAT2 uv;
-};
+// Texture
+//ID3D11Texture2D* g_pTextureResource = nullptr;
+ID3D11ShaderResourceView* g_pTextureResourceView = nullptr;
+ID3D11SamplerState* g_pSamplerLinear = nullptr;
+
+// Normal Mapping
+ID3D11ShaderResourceView* g_pNormalMapShaderResourceView = nullptr;
+
+// Alpha Blend
+ID3D11BlendState* g_pAlphaBlendState = nullptr;
+ID3D11RasterizerState* g_pRasterizerState = nullptr;
 
 struct ConstantBuffer
 {
@@ -38,578 +46,17 @@ struct ConstantBuffer
 	float spotAngle;
 };
 
-struct MeshData
+struct AnimConstantBuffer
 {
-	std::vector<SimpleVertex> meshVertices;
-	std::vector<WORD> meshIndices;
-	ID3D11Buffer* pVertexBuffer;
-	ID3D11Buffer* pIndexBuffer;
+	DirectX::XMMATRIX animTransform[114];
+	//FbxAMatrix animTransform[114];
 };
 
-struct TextureInfo
-{
-	std::string filePath;
-	bool hasTexture = false;
-};
-
-struct MaterialData
-{
-	FbxDouble3 diffuseColor = { 1.0, 1.0, 1.0 };
-	FbxDouble3 specularColor = { 0.0, 0.0, 0.0 };
-
-	float shininess = 0.0f;
-	float opacity = 1.0f;
-
-	TextureInfo diffuseTex;
-	TextureInfo normalTex;
-	TextureInfo specularTex;
-	TextureInfo opacityTex;
-
-	std::string materialName;
-	std::string shadingModel;
-};
-
-
-MeshData* g_pMeshData = nullptr;
-std::vector<MaterialData> g_materialDatas;
-
-
-float g_fRotaionAngle = 0.0f;
-
-// Render
-ID3D11InputLayout* g_pInputLayout = nullptr;
-ID3D11Buffer* g_pConstantBuffer;
-ID3D11VertexShader* g_pVertexShader = nullptr;
-ID3D11PixelShader* g_pPixelShader = nullptr;
-
-// Texture
-//ID3D11Texture2D* g_pTextureResource = nullptr;
-ID3D11ShaderResourceView* g_pTextureResourceView = nullptr;
-ID3D11SamplerState* g_pSamplerLinear = nullptr;
-
-// Normal Mapping
-ID3D11ShaderResourceView* g_pNormalMapShaderResourceView = nullptr;
-
-// Alpha Blend
-ID3D11BlendState* g_pAlphaBlendState = nullptr;
-ID3D11RasterizerState* g_pRasterizerState = nullptr;
-
+FBXLoader* g_pFBXLoader = nullptr;
+FBXMesh* g_pMesh = nullptr;
+FBXAnimation* g_pAnimation = nullptr;
 
 // ------------------------- Functions ------------------------------------- //
-
-FbxMesh* FindMesh(FbxNode* node)
-{
-	if (nullptr == node)
-	{
-		return nullptr;
-	}
-
-	FbxMesh* mesh = node->GetMesh();
-	if (nullptr != mesh)
-	{
-		return mesh;
-	}
-
-	for (int32_t n = 0; n < node->GetChildCount(); ++n)
-	{
-		FbxMesh* findMesh = FindMesh(node->GetChild(n));
-		if (nullptr != findMesh) {
-			return findMesh;
-		}
-	}
-	return nullptr;
-}
-
-int CountMeshes(FbxNode* node)
-{
-	int count = 0;
-
-	// 현재 노드가 Mesh인지 검사
-	if (node->GetMesh())
-		count++;
-
-	// 자식 노드 순회
-	for (int i = 0; i < node->GetChildCount(); i++)
-	{
-		count += CountMeshes(node->GetChild(i));
-	}
-
-	return count;
-}
-
-
-void LoadMaterialData(MaterialData* outmatData, FbxSurfaceMaterial* fbxMaterial)
-{
-	//MaterialData matData;
-
-	if (!fbxMaterial)
-	{
-		return;
-	}
-
-	// -----------------------
-	// 기본 정보
-	// -----------------------
-	outmatData->materialName = fbxMaterial->GetName();
-	outmatData->shadingModel = fbxMaterial->ShadingModel.Get().Buffer();
-
-
-	// ============================================================
-	// Helper: 색상 추출
-	// ============================================================
-	auto ReadColor = [&](FbxProperty prop, FbxDouble3& outColor)
-		{
-			if (prop.IsValid()) outColor = prop.Get<FbxDouble3>();
-		};
-
-	// ============================================================
-	// Helper: float 값 추출
-	// ============================================================
-	auto ReadFloat = [&](FbxProperty prop, float& outValue)
-		{
-			if (prop.IsValid()) outValue = static_cast<float>(prop.Get<FbxDouble>());
-		};
-
-	// ============================================================
-	// Helper: 텍스처 추출
-	// ============================================================
-	auto ReadTexture = [&](FbxProperty prop, TextureInfo& outTex)
-		{
-			if (!prop.IsValid())
-			{
-				return;
-			}
-
-			int texCount = prop.GetSrcObjectCount<FbxFileTexture>();
-			if (texCount > 0)
-			{
-				FbxFileTexture* tex = prop.GetSrcObject<FbxFileTexture>(0);
-				if (tex)
-				{
-					outTex.filePath = tex->GetFileName();
-					outTex.hasTexture = true;
-					return;
-				}
-			}
-
-			// LayeredTexture 지원
-			int layeredCount = prop.GetSrcObjectCount<FbxLayeredTexture>();
-			if (layeredCount > 0)
-			{
-				FbxLayeredTexture* layeredTex = prop.GetSrcObject<FbxLayeredTexture>(0);
-				if (layeredTex && layeredTex->GetSrcObjectCount<FbxFileTexture>() > 0)
-				{
-					FbxFileTexture* tex = layeredTex->GetSrcObject<FbxFileTexture>(0);
-					outTex.filePath = tex->GetFileName();
-					outTex.hasTexture = true;
-				}
-			}
-		};
-
-
-	// ============================================================
-	// FBX 주요 property
-	// ============================================================
-	FbxProperty propDiffuse = fbxMaterial->FindProperty(FbxSurfaceMaterial::sDiffuse);
-	FbxProperty propSpecular = fbxMaterial->FindProperty(FbxSurfaceMaterial::sSpecular);
-	FbxProperty propShininess = fbxMaterial->FindProperty(FbxSurfaceMaterial::sShininess);
-	FbxProperty propOpacity = fbxMaterial->FindProperty(FbxSurfaceMaterial::sTransparencyFactor);
-	FbxProperty propNormal = fbxMaterial->FindProperty(FbxSurfaceMaterial::sNormalMap);
-
-
-	// ============================================================
-	// 색상 / 값 파싱
-	// ============================================================
-	ReadColor(propDiffuse, outmatData->diffuseColor);
-	ReadColor(propSpecular, outmatData->specularColor);
-
-	ReadFloat(propShininess, outmatData->shininess);
-	ReadFloat(propOpacity, outmatData->opacity);
-
-
-	// ============================================================
-	// 텍스처 파싱
-	// ============================================================
-	ReadTexture(propDiffuse, outmatData->diffuseTex);
-	ReadTexture(propSpecular, outmatData->specularTex);
-	ReadTexture(propNormal, outmatData->normalTex);
-
-
-	// ------------------------------------------------------------
-	// Opacity Texture Fallback 처리
-	// ------------------------------------------------------------
-	FbxProperty propOpacityTex;
-
-	// Blender 스타일
-	propOpacityTex = fbxMaterial->FindProperty("Opacity");
-
-	// Autodesk TransparentColor
-	if (!propOpacityTex.IsValid()) propOpacityTex = fbxMaterial->FindProperty("TransparentColor");
-
-	// FBX 표준 TransparentColor
-	if (!propOpacityTex.IsValid()) propOpacityTex = fbxMaterial->FindProperty(FbxSurfaceMaterial::sTransparentColor);
-
-	// TransparencyFactor도 텍스처가 걸려있을 수 있음
-	if (!propOpacityTex.IsValid()) propOpacityTex = fbxMaterial->FindProperty(FbxSurfaceMaterial::sTransparencyFactor);
-
-	// 텍스처 읽기
-	if (propOpacityTex.IsValid()) ReadTexture(propOpacityTex, outmatData->opacityTex);
-
-	return;
-}
-
-void FindMaterial(FbxNode* node, std::vector<MaterialData>& materialDatas)
-{
-	
-	if (nullptr == node)
-	{
-		return;
-	}
-	
-	for (int i = 0; i < node->GetMaterialCount(); ++i)
-	{
-		FbxSurfaceMaterial* material = node->GetMaterial(i);
-		MaterialData tmpData;
-		LoadMaterialData(&tmpData, material);
-		materialDatas.push_back(tmpData);
-	}
-
-	for (int32_t n = 0; n < node->GetChildCount(); ++n)
-	{
-		FindMaterial(node->GetChild(n), materialDatas);
-	}
-	
-	return;
-}
-
-
-bool LoadFbxMesh(const char* fileName, std::vector<SimpleVertex>* outVertices, std::vector<WORD>* outIndices)
-{
-	FbxManager* manager = FbxManager::Create();
-	if (nullptr == manager)
-	{
-		return false;
-	}
-
-	FbxIOSettings* ios = FbxIOSettings::Create(manager, IOSROOT);
-	manager->SetIOSettings(ios);
-
-	FbxImporter* importer = FbxImporter::Create(manager, "fbxImporter");
-	bool status = importer->Initialize(fileName, -1, manager->GetIOSettings());
-	if (false == status)
-	{
-		importer->Destroy();
-		manager->Destroy();
-		return false;
-	}
-
-	FbxScene* scene = FbxScene::Create(manager, "fbxScene");
-	importer->Import(scene);
-	importer->Destroy();
-
-	FbxAxisSystem engineAxis(FbxAxisSystem::eZAxis, FbxAxisSystem::eParityOdd, FbxAxisSystem::eRightHanded);
-	engineAxis.ConvertScene(scene);
-
-	FbxGeometryConverter geomConv(manager);
-	geomConv.Triangulate(scene, true);
-
-	FbxNode* rootNode = scene->GetRootNode();
-	if (nullptr == rootNode)
-	{
-		manager->Destroy();
-		return false;
-	}
-
-	// FBX Scene에서 mesh 갯수.
-	int totalMeshCount = CountMeshes(rootNode);
-	if (1 != totalMeshCount)
-	{
-		DEBUG_BREAK();
-	}
-
-	// 처음만난 Mesh
-	FbxMesh* foundMesh = FindMesh(rootNode);
-	if (nullptr == foundMesh)
-	{
-		manager->Destroy();
-		return false;
-	}
-
-	// GetControlPointsCount() -> 물리적인 Vertex 갯수.
-	int32_t ctrlPointCount = foundMesh->GetControlPointsCount();
-	outVertices->reserve(ctrlPointCount);
-
-	// 버텍스 수집
-	for (int32_t n = 0; n < ctrlPointCount; ++n)
-	{
-		FbxVector4 p = foundMesh->GetControlPointAt(n);
-		SimpleVertex v;
-		v.position = { (float)p[0], (float)p[1], (float)p[2] };
-		outVertices->push_back(v);
-	}
-
-	// 인덱스 수집
-	int32_t polygonCount = foundMesh->GetPolygonCount();
-	for (int32_t n = 0; n < polygonCount; ++n)
-	{
-		int32_t polygonSize = foundMesh->GetPolygonSize(n);
-		for (int32_t j = 0; j < polygonSize; ++j)
-		{
-			int32_t ctrlIndex = foundMesh->GetPolygonVertex(n, j);
-			outIndices->push_back(ctrlIndex);
-		}
-	}
-
-	// Vertex Color 수집.
-	FbxGeometryElementVertexColor* colorElem = foundMesh->GetElementVertexColor(0);
-	if (colorElem)
-	{
-		auto mapMode = colorElem->GetMappingMode();
-		auto refMode = colorElem->GetReferenceMode();
-		if (mapMode == FbxGeometryElement::eByControlPoint)
-		{
-			for (int i = 0; i < ctrlPointCount; i++)
-			{
-				int index = (refMode == FbxGeometryElement::eDirect)
-					? i : colorElem->GetIndexArray().GetAt(i);
-
-				FbxColor c = colorElem->GetDirectArray().GetAt(index);
-				(*outVertices)[index].color = { (float)c.mRed, (float)c.mGreen, (float)c.mBlue , (float)c.mAlpha };
-			}
-		}
-		else if (mapMode == FbxGeometryElement::eByPolygonVertex)
-		{
-			int polyCount = foundMesh->GetPolygonCount();
-			int polyVertexCounter = 0;
-
-			for (int p = 0; p < polyCount; p++)
-			{
-				int vertexCount = foundMesh->GetPolygonSize(p);
-
-				for (int v = 0; v < vertexCount; v++)
-				{
-					int colorIndex = (refMode == FbxGeometryElement::eDirect)
-						? polyVertexCounter : colorElem->GetIndexArray().GetAt(polyVertexCounter);
-
-					FbxColor c = colorElem->GetDirectArray().GetAt(colorIndex);
-					(*outVertices)[colorIndex].color = { (float)c.mRed, (float)c.mGreen, (float)c.mBlue , (float)c.mAlpha };
-					polyVertexCounter++;
-				}
-			}
-		}
-	}
-
-
-
-	int32_t normalElementCount = foundMesh->GetElementNormalCount();
-	if (0 < normalElementCount)
-	{
-		FbxGeometryElementNormal* normalElement = foundMesh->GetElementNormal(0);
-		switch (normalElement->GetMappingMode())
-		{
-		case FbxGeometryElement::eByControlPoint:
-			switch (normalElement->GetReferenceMode())
-			{
-			case FbxGeometryElement::eDirect:
-			{
-				for (int32_t n = 0; n < ctrlPointCount; ++n)
-				{
-					FbxVector4 tmp = normalElement->GetDirectArray().GetAt(n);
-					(*outVertices)[n].normal = { (float)tmp[0], (float)tmp[1], (float)tmp[2], (float)tmp[3] };
-				}
-			} break;
-			case FbxGeometryElement::eIndexToDirect:
-			{
-				for (int32_t n = 0; n < ctrlPointCount; ++n)
-				{
-					int index = normalElement->GetIndexArray().GetAt(n);
-					FbxVector4 tmp = normalElement->GetDirectArray().GetAt(index);
-					(*outVertices)[n].normal = { (float)tmp[0], (float)tmp[1], (float)tmp[2], (float)tmp[3] };
-				}
-			} break;
-			default:
-				DEBUG_BREAK();
-			} break;
-		case FbxGeometryElement::eByPolygonVertex:
-			switch (normalElement->GetReferenceMode())
-			{
-			case FbxGeometryElement::eDirect:
-			{
-				DEBUG_BREAK();
-			} break;
-			case FbxGeometryElement::eIndexToDirect:
-			{
-				DEBUG_BREAK();
-			} break;
-			default:
-				DEBUG_BREAK();
-			} break;
-		}
-	}
-
-	// 탄젠트 정보
-	int32_t tangentElementCount = foundMesh->GetElementTangentCount();
-	if (0 < tangentElementCount)
-	{
-		FbxGeometryElementTangent* tangenElement = foundMesh->GetElementTangent(0);
-		switch (tangenElement->GetMappingMode())
-		{
-		case FbxGeometryElement::eByControlPoint:
-			switch (tangenElement->GetReferenceMode())
-			{
-			case FbxGeometryElement::eDirect:
-			{
-				for (int32_t n = 0; n < ctrlPointCount; ++n)
-				{
-					FbxVector4 tmp = tangenElement->GetDirectArray().GetAt(n);
-					(*outVertices)[n].tangent = { (float)tmp[0], (float)tmp[1], (float)tmp[2], (float)tmp[3] };
-
-					//DirectX::XMVECTOR nVec = DirectX::XMLoadFloat3(&(*outVertices)[n].normal);
-					//DirectX::XMFLOAT3 floatTangent = DirectX::XMFLOAT3((*outVertices)[n].tangent.x, (*outVertices)[n].tangent.y, (*outVertices)[n].tangent.z);
-					//DirectX::XMVECTOR tVec = DirectX::XMLoadFloat3(&floatTangent);
-					//DirectX::XMVECTOR bVec = DirectX::XMVector3Cross(nVec, tVec);
-					//DirectX::XMVECTOR c = DirectX::XMVector3Cross(tVec, bVec);
-					//float dotVal = DirectX::XMVectorGetX(DirectX::XMVector3Dot(c, nVec));
-					//float handedness = (dotVal < 0.0f) ? -1.0f : 1.0f;
-					//(*outVertices)[n].tangent.z = handedness;
-				}
-			}
-			break;
-			case FbxGeometryElement::eIndexToDirect:
-			{
-				for (int32_t n = 0; n < ctrlPointCount; ++n)
-				{
-					int32_t tangentIndex = tangenElement->GetIndexArray().GetAt(n);
-					FbxVector4 tmp = tangenElement->GetDirectArray().GetAt(tangentIndex);
-					(*outVertices)[n].tangent = { (float)tmp[0], (float)tmp[1], (float)tmp[2],(float)tmp[3] };
-
-					//DirectX::XMVECTOR nVec = DirectX::XMLoadFloat3(&(*outVertices)[n].normal);
-					//DirectX::XMFLOAT3 floatTangent = DirectX::XMFLOAT3((*outVertices)[n].tangent.x, (*outVertices)[n].tangent.y, (*outVertices)[n].tangent.z);
-					//DirectX::XMVECTOR tVec = DirectX::XMLoadFloat3(&floatTangent);
-					//DirectX::XMVECTOR bVec = DirectX::XMVector3Cross(nVec, tVec);
-					//DirectX::XMVECTOR c = DirectX::XMVector3Cross(tVec, bVec);
-					//float dotVal = DirectX::XMVectorGetX(DirectX::XMVector3Dot(c, nVec));
-					//float handedness = (dotVal < 0.0f) ? -1.0f : 1.0f;
-					//(*outVertices)[n].tangent.z = handedness;
-				}
-			}
-			break;
-			default:
-				DEBUG_BREAK();
-			}
-			break;
-		case FbxGeometryElement::eByPolygonVertex:
-			switch (tangenElement->GetReferenceMode())
-			{
-			case FbxGeometryElement::eDirect:
-			{
-				DEBUG_BREAK();
-			}
-			break;
-			case FbxGeometryElement::eIndexToDirect:
-			{
-				DEBUG_BREAK();
-			}
-			break;
-			default:
-				DEBUG_BREAK();
-			}
-			break;
-		}
-	}
-	else
-	{
-		// 탄젠트가 없을 경우.
-		for (int32_t n = 0; n < ctrlPointCount; ++n)
-		{
-			DirectX::XMFLOAT4 tmpNormal4 = (*outVertices)[n].normal;
-			DirectX::XMFLOAT3 tmpNormal3 = { tmpNormal4.x, tmpNormal4.y, tmpNormal4.z };
-			DirectX::XMFLOAT3 up(0.0f, 0.0f, 1.0f);
-			float dotUp = fabsf(tmpNormal3.x * up.x + tmpNormal3.y * up.y + tmpNormal3.z * up.z);
-			if (dotUp > 0.98f)
-			{
-				up = DirectX::XMFLOAT3(0.0f, 1.0f, 0.0f);
-			}
-
-			DirectX::XMVECTOR normalV = DirectX::XMLoadFloat3(&tmpNormal3);
-			DirectX::XMVECTOR upV = DirectX::XMLoadFloat3(&up);
-			DirectX::XMVECTOR tVec = DirectX::XMVector3Normalize(DirectX::XMVector3Cross(normalV, upV));
-			DirectX::XMFLOAT3 t3;
-			DirectX::XMStoreFloat3(&t3, tVec);
-
-			(*outVertices)[n].tangent = { t3.x, t3.y, t3.z, 1.f };
-
-			DirectX::XMVECTOR bVec = DirectX::XMVector3Cross(normalV, tVec);
-			DirectX::XMVECTOR c = DirectX::XMVector3Cross(tVec, bVec);
-			float dotVal = DirectX::XMVectorGetX(DirectX::XMVector3Dot(c, normalV));
-			float handedness = (dotVal < 0.0f) ? -1.0f : 1.0f;
-			(*outVertices)[n].tangent.z = handedness;
-		}
-	}
-
-
-
-	int32_t uvElementCount = foundMesh->GetElementUVCount();
-	if (0 < uvElementCount)
-	{
-		FbxGeometryElementUV* uvElement = foundMesh->GetElementUV(0);
-		switch (uvElement->GetMappingMode())
-		{
-		case FbxGeometryElement::eByControlPoint:
-			switch (uvElement->GetReferenceMode())
-			{
-			case FbxGeometryElement::eDirect:
-			{
-				for (int32_t n = 0; n < ctrlPointCount; ++n)
-				{
-					FbxVector2 uv = uvElement->GetDirectArray().GetAt(n);
-					(*outVertices)[n].uv = { (float)uv[0], (float)uv[1] };
-				}
-			}
-			break;
-			case FbxGeometryElement::eIndexToDirect:
-			{
-				for (int32_t n = 0; n < ctrlPointCount; ++n)
-				{
-					int32_t uvIndex = uvIndex = uvElement->GetIndexArray().GetAt(n);
-					FbxVector2 uv = uvElement->GetDirectArray().GetAt(uvIndex);
-					(*outVertices)[n].uv = { (float)uv[0], (float)uv[1] };
-				}
-			}
-			break;
-			default:
-				DEBUG_BREAK();
-			}
-			break;
-		case FbxGeometryElement::eByPolygonVertex:
-			switch (uvElement->GetReferenceMode())
-			{
-			case FbxGeometryElement::eDirect:
-			{
-				DEBUG_BREAK();
-			}
-			break;
-			case FbxGeometryElement::eIndexToDirect:
-			{
-				DEBUG_BREAK();
-			}
-			break;
-			default:
-				DEBUG_BREAK();
-			}
-			break;
-		}
-	}
-
-	FindMaterial(rootNode, g_materialDatas);
-	g_pMeshData->meshVertices;
-
-
-	manager->Destroy();
-	return true;
-}
-
-
 IDXGIAdapter* GetBestAdapter()
 {
 	IDXGIFactory* pFactory = nullptr;
@@ -775,25 +222,18 @@ HRESULT InitD3D(HWND hWnd)
 
 HRESULT InitMesh()
 {
-	//LoadFbxMesh("..\\..\\Resource\\fbx\\Mesh\\Mannequin.FBX", &g_pMeshData->meshVertices, &g_pMeshData->meshIndices);
-	//LoadFbxMesh("..\\..\\Resource\\fbx\\Mesh\\AnimMan.FBX", &g_pMeshData->meshVertices, &g_pMeshData->meshIndices);
-	//LoadFbxMesh("..\\..\\Resource\\fbx\\Mesh\\SK_Troll.FBX", &g_pMeshData->meshVertices, &g_pMeshData->meshIndices);
-	//LoadFbxMesh("..\\..\\Resource\\fbx\\Mesh\\SK_Barbarian_Body.FBX", &g_pMeshData->meshVertices, &g_pMeshData->meshIndices);
-	LoadFbxMesh("..\\..\\Resource\\fbx\\Mesh\\JUMPER_MESH.FBX", &g_pMeshData->meshVertices, &g_pMeshData->meshIndices);
-	
-
 	D3D11_BUFFER_DESC bd;
 	memset(&bd, 0x00, sizeof(D3D11_BUFFER_DESC));
 	bd.Usage = D3D11_USAGE_DEFAULT;
-	bd.ByteWidth = (UINT)(sizeof(SimpleVertex) * g_pMeshData->meshVertices.size());
+	bd.ByteWidth = (UINT)(sizeof(SimpleVertex) * g_pMesh->pData_->meshVertices.size());
 	bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	bd.CPUAccessFlags = 0;
 
 	D3D11_SUBRESOURCE_DATA InitData;
 	memset(&InitData, 0x00, sizeof(D3D11_SUBRESOURCE_DATA));
-	InitData.pSysMem = g_pMeshData->meshVertices.data();
+	InitData.pSysMem = g_pMesh->pData_->meshVertices.data();
 
-	HRESULT hr = g_pd3dDevice->CreateBuffer(&bd, &InitData, &g_pMeshData->pVertexBuffer);
+	HRESULT hr = g_pd3dDevice->CreateBuffer(&bd, &InitData, &g_pMesh->pData_->pVertexBuffer);
 	if (FAILED(hr))
 	{
 		return hr;
@@ -801,12 +241,12 @@ HRESULT InitMesh()
 
 	// 인덱스 버퍼
 	bd.Usage = D3D11_USAGE_DEFAULT;
-	bd.ByteWidth = (UINT)(sizeof(WORD) * g_pMeshData->meshIndices.size());
+	bd.ByteWidth = (UINT)(sizeof(WORD) * g_pMesh->pData_->meshIndices.size());
 	bd.BindFlags = D3D11_BIND_INDEX_BUFFER;
 	bd.CPUAccessFlags = 0;
 
-	InitData.pSysMem = g_pMeshData->meshIndices.data();
-	hr = g_pd3dDevice->CreateBuffer(&bd, &InitData, &g_pMeshData->pIndexBuffer);
+	InitData.pSysMem = g_pMesh->pData_->meshIndices.data();
+	hr = g_pd3dDevice->CreateBuffer(&bd, &InitData, &g_pMesh->pData_->pIndexBuffer);
 	if (FAILED(hr))
 	{
 		return hr;
@@ -822,8 +262,19 @@ HRESULT InitConstantBuffer()
 	desc.ByteWidth = sizeof(ConstantBuffer);
 	desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 	desc.CPUAccessFlags = 0;
-
 	HRESULT hr = g_pd3dDevice->CreateBuffer(&desc, nullptr, &g_pConstantBuffer);
+	if (FAILED(hr))
+	{
+		DEBUG_BREAK();
+		return hr;
+	}
+
+	D3D11_BUFFER_DESC animDesc = {};
+	animDesc.Usage = D3D11_USAGE_DEFAULT;
+	animDesc.ByteWidth = sizeof(AnimConstantBuffer);
+	animDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	animDesc.CPUAccessFlags = 0;
+	hr = g_pd3dDevice->CreateBuffer(&animDesc, nullptr, &g_pAnimationBuffer);
 	if (FAILED(hr))
 	{
 		DEBUG_BREAK();
@@ -840,7 +291,9 @@ HRESULT InitInputLayout(ID3DBlob* pVSBlob)
 			{"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0},
 			{"NORMAL", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 28, D3D11_INPUT_PER_VERTEX_DATA, 0},
 			{"TANGENT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 44, D3D11_INPUT_PER_VERTEX_DATA, 0},
-			{"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 60, D3D11_INPUT_PER_VERTEX_DATA, 0}
+			{"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 60, D3D11_INPUT_PER_VERTEX_DATA, 0},
+			{"BLENDINDICES", 0, DXGI_FORMAT_R32G32B32A32_UINT, 0, 76, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			{"BLENDWEIGHT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 92, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 	};
 
 	HRESULT hr = g_pd3dDevice->CreateInputLayout(layout, ARRAYSIZE(layout), pVSBlob->GetBufferPointer(), pVSBlob->GetBufferSize(), &g_pInputLayout);
@@ -1126,7 +579,7 @@ void UpdateConstantResource(const Transform& worldTransform)
 	// Spot Light
 	DirectX::XMFLOAT4 lightColor = DirectX::XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 	DirectX::XMFLOAT4 ambientColor = DirectX::XMFLOAT4(0.3f, 0.3f, 0.3f, 0.3f);
-	DirectX::XMFLOAT3 spotPosition = DirectX::XMFLOAT3(-2.0f, -1.0f, 0.0f);
+	DirectX::XMFLOAT3 spotPosition = DirectX::XMFLOAT3(-5.0f, -4.8f, 2.5f);
 	DirectX::XMFLOAT3 spotDirection = DirectX::XMFLOAT3(1.0f, 0.0f, 0.0f);
 
 	float spotRange = 20.0f;
@@ -1153,10 +606,10 @@ void IASetting()
 	// 버텍스 버퍼 설정
 	UINT stride = sizeof(SimpleVertex);
 	UINT offset = 0;
-	g_pImmediateContext->IASetVertexBuffers(0, 1, &g_pMeshData->pVertexBuffer, &stride, &offset);
+	g_pImmediateContext->IASetVertexBuffers(0, 1, &g_pMesh->pData_->pVertexBuffer, &stride, &offset);
 
 	// 인덱스 버퍼 설정
-	g_pImmediateContext->IASetIndexBuffer(g_pMeshData->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
+	g_pImmediateContext->IASetIndexBuffer(g_pMesh->pData_->pIndexBuffer, DXGI_FORMAT_R16_UINT, 0);
 
 	// 프리미티브 유형 설정
 	g_pImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -1169,6 +622,7 @@ void VSSetting()
 	// StartSlot : Buffer Slot
 	// NumBuffers : Buffer가 2개 이상인 배열인 경우 설정.
 	g_pImmediateContext->VSSetConstantBuffers(0, 1, &g_pConstantBuffer);
+	g_pImmediateContext->VSSetConstantBuffers(1, 1, &g_pAnimationBuffer);
 }
 
 void RSSetting()
@@ -1205,13 +659,6 @@ void OMSetting()
 	g_pImmediateContext->OMSetRenderTargets(1, &g_pRenderTargetView, g_pDepthStencilView);
 
 	float blendFactor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-	// ( SrcColor * blendFactor ) + (desColor * (1 - blendFactor))
-	// + blendFactor를 조절하여 Fade In Out 기능을 구현할수 있다.
-	// + 또는 색 강조도가능.
-	// + 하지만 BlendFactor를 사용하면 Alpha 기능은 사용하지 못함.=
-	//  BlendFactor 사용시 설정.
-	// + blendDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_BLEND_FACTOR;
-	// + blendDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_BLEND_FACTOR; // 1 - BlendFactor  // 렌더타켓
 
 	g_pImmediateContext->OMSetBlendState(g_pAlphaBlendState, blendFactor, 0xffffffff);
 }
@@ -1220,7 +667,20 @@ void BeginPlay()
 {
 	InitDepthStencilBuffer();
 
-	g_pMeshData = new MeshData;
+	g_pMesh = new FBXMesh;
+	g_pAnimation = new FBXAnimation;
+	g_pFBXLoader = new FBXLoader;
+
+	// ("..\\..\\Resource\\fbx\\Mannequin.FBX")
+	// ("..\\..\\Resource\\fbx\\AnimMan.FBX")
+	// ("..\\..\\Resource\\fbx\\SK_Troll.FBX")
+	// ("..\\..\\Resource\\fbx\\SK_Barbarian_Body.FBX")
+	// ("..\\..\\Resource\\Fbx\\Mesh\\JUMPER_MESH.FBX")
+	g_pFBXLoader->LoadMesh(g_pMesh, "..\\..\\Resource\\Fbx\\Mesh\\JUMPER_MESH.FBX");
+	g_pFBXLoader->LoadAnimation(g_pAnimation, "..\\..\\Resource\\Fbx\\Animation\\JUMPER_IDLE.FBX");
+
+	g_pMesh;
+	g_pAnimation;
 
 	InitMesh();
 
@@ -1236,7 +696,7 @@ void BeginPlay()
 
 	InitRasterizerState();
 
-	IASetting();
+	IASetting();	
 
 	VSSetting();
 
@@ -1245,6 +705,127 @@ void BeginPlay()
 	PSSetting();
 
 	OMSetting();
+}
+
+double currentTime = 0.0;
+bool loop = true;
+
+void UpdateAnimation
+(
+	FBXMesh& player,
+	const FBXAnimation& animation,
+	double deltaTime,
+	std::vector<FbxAMatrix>& outFinalBoneMatrices
+)
+{
+	//if (!animation.clip) return;
+
+	const AnimationClip& clip = animation.animationClip_;
+
+	// 1. 시간 진행
+	currentTime += deltaTime;
+
+	if (loop)
+	{
+		while (currentTime > clip.duration)
+		{
+			currentTime -= clip.duration;
+		}
+	}
+	else
+	{
+		if (currentTime > clip.duration)
+		{
+			currentTime = clip.duration;
+		}
+	}
+	
+	const int boneCount = player.bones_.size();
+	outFinalBoneMatrices.resize(boneCount);
+
+	// 2. 각 본에 대해 애니메이션 행렬 계산
+	for (int i = 0; i < boneCount; ++i)
+	{
+		const BoneAnimation& boneAnim = clip.boneAnimations[i];
+
+		// Keyframe 2개 찾기 (Nearest Sampling)
+		const BoneKeyframe* k0 = nullptr;
+		const BoneKeyframe* k1 = nullptr;
+
+		for (size_t k = 0; k + 1 < boneAnim.keyframes.size(); ++k)
+		{
+			if (currentTime >= boneAnim.keyframes[k].time.GetSecondDouble() 
+				&& currentTime <= boneAnim.keyframes[k + 1].time.GetSecondDouble())
+			{
+				k0 = &boneAnim.keyframes[k];
+				k1 = &boneAnim.keyframes[k + 1];
+				break;
+			}
+		}
+
+		// fallback
+		if (!k0 || !k1)
+		{
+			outFinalBoneMatrices[i] = player.bones_[i].globalBindPose.Inverse();
+			continue;
+		}
+
+		double t0 = k0->time.GetSecondDouble();
+		double t1 = k1->time.GetSecondDouble();
+		double alpha = (currentTime - t0) / (t1 - t0);
+
+		// 3. Global Transform 보간
+		FbxVector4 tA = k0->globalTransform.GetT();
+		FbxVector4 tB = k1->globalTransform.GetT();
+
+		FbxQuaternion rA = k0->globalTransform.GetQ();
+		FbxQuaternion rB = k1->globalTransform.GetQ();
+
+		FbxVector4 sA = k0->globalTransform.GetS();
+		FbxVector4 sB = k1->globalTransform.GetS();
+
+		FbxVector4 T = tA + (tB - tA) * alpha;
+		FbxQuaternion Q;
+		Q = rA.Slerp(rB, alpha);
+		FbxVector4 S = sA + (sB - sA) * alpha;
+
+		FbxAMatrix animatedGlobal;
+		animatedGlobal.SetTQS(T, Q, S);
+
+
+		// 4. Skinning 최종 행렬
+		outFinalBoneMatrices[i] = animatedGlobal * player.bones_[i].globalBindPose.Inverse();
+	}
+}
+
+DirectX::XMFLOAT4X4 ConvertToXMFLOAT4X4(const FbxAMatrix& m)
+{
+	DirectX::XMFLOAT4X4 result;
+
+	for (int row = 0; row < 4; ++row)
+	{
+		for (int col = 0; col < 4; ++col)
+		{
+			result.m[row][col] = static_cast<float>(m[row][col]);
+		}
+	}
+	return result;
+}
+
+void Update()
+{
+	std::vector<FbxAMatrix> finalBoneMatrices;
+	UpdateAnimation(*g_pMesh, *g_pAnimation, 0.005, finalBoneMatrices);
+
+	AnimConstantBuffer cb = {};
+	for (int i = 0; i < finalBoneMatrices.size(); ++i)
+	{
+		DirectX::XMFLOAT4X4 M = ConvertToXMFLOAT4X4(finalBoneMatrices[i]);
+		DirectX::XMMATRIX tmpM = XMLoadFloat4x4(&M);
+		cb.animTransform[i] = XMMatrixTranspose(tmpM);
+	}
+
+	g_pImmediateContext->UpdateSubresource(g_pAnimationBuffer, 0, nullptr, &cb, 0, 0);
 }
 
 void RenderBegin()
@@ -1256,21 +837,20 @@ void RenderBegin()
 
 void Render()
 {
-	g_fRotaionAngle += 0.05f;
 	Transform tf1;
 	tf1.SetScale({ 1.0f, 1.0f, 1.0f });
-	tf1.SetRotation({ 0.0f, 0.0f, g_fRotaionAngle });
-	tf1.SetPosition({ 0.0f, -8.0f, 0.0f });
+	tf1.SetRotation({ 0.0f, 0.0f, -90.0f});
+	tf1.SetPosition({ 0.0f, -5.0f, -0.0f });
 	UpdateConstantResource(tf1);
-	g_pImmediateContext->DrawIndexed(g_pMeshData->meshIndices.size(), 0, 0);
+	g_pImmediateContext->DrawIndexed(g_pMesh->pData_->meshIndices.size(), 0, 0);
 
 
 	Transform tf2;
 	tf2.SetScale({ 1.0f, 1.0f, 1.0f });
-	tf2.SetRotation({ 0.0f, 0.0f, -g_fRotaionAngle });
-	tf2.SetPosition({ 0.0f, 8.0f, 0.0f });
+	tf2.SetRotation({ 0.0f, 0.0f, 90.0f});
+	tf2.SetPosition({ 0.0f, 5.0f, -0.0f });
 	UpdateConstantResource(tf2);
-	g_pImmediateContext->DrawIndexed(g_pMeshData->meshIndices.size(), 0, 0);
+	g_pImmediateContext->DrawIndexed(g_pMesh->pData_->meshIndices.size(), 0, 0);
 
 }
 
@@ -1281,23 +861,18 @@ void RenderEnd()
 
 void Cleanup()
 {
-	if (g_pMeshData)
+	if (g_pFBXLoader)
 	{
-		if (g_pMeshData->pVertexBuffer)
-		{
-			g_pMeshData->pVertexBuffer->Release();
-			g_pMeshData->pVertexBuffer = nullptr;
-		}
-		if (g_pMeshData->pIndexBuffer)
-		{
-
-			g_pMeshData->pIndexBuffer->Release();
-			g_pMeshData->pIndexBuffer = nullptr;
-		}
-
-		delete g_pMeshData;
-		g_pMeshData = nullptr;
+		delete g_pFBXLoader;
+		g_pFBXLoader = nullptr;
 	}
+
+	if (g_pMesh)
+	{
+		delete g_pMesh;
+		g_pMesh = nullptr;
+	}
+
 	if (g_pRasterizerState) g_pRasterizerState->Release();
 	if (g_pAlphaBlendState) g_pAlphaBlendState->Release();
 	if (g_pNormalMapShaderResourceView) g_pNormalMapShaderResourceView->Release();
@@ -1306,8 +881,7 @@ void Cleanup()
 	if (g_pPixelShader) g_pPixelShader->Release();
 	if (g_pVertexShader) g_pVertexShader->Release();
 	if (g_pConstantBuffer) g_pConstantBuffer->Release();
-	//if (g_pIndexBuffer) g_pIndexBuffer->Release();
-	//if (g_pVertexBuffer) g_pVertexBuffer->Release();
+	if (g_pAnimationBuffer) g_pAnimationBuffer->Release();
 	if (g_pInputLayout) g_pInputLayout->Release();
 	if (g_pImmediateContext) g_pImmediateContext->ClearState();
 	if (g_pDepthStencilView) g_pDepthStencilView->Release();
@@ -1382,6 +956,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		}
 		else
 		{
+			Update();
+
 			RenderBegin();
 
 			Render();

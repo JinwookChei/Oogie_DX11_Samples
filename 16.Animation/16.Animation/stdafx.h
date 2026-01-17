@@ -5,10 +5,12 @@
 #include <d3dcompiler.h>
 #include <dxgi.h>
 #include <DirectXTex.h>
-
 #include <fbxsdk.h>
-
 #include <vector>
+#include <string>
+#include <sstream>
+#include <string_view>
+#include <functional>
 
 #pragma comment(lib, "DirectXTex")
 #pragma comment(lib, "d3d11")
@@ -31,3 +33,7 @@
 
 #include "VectorType.h"
 #include "Transform.h"
+#include "FBXLoader.h"
+#include "FBXAnimation.h"
+#include "FBXMesh.h"
+

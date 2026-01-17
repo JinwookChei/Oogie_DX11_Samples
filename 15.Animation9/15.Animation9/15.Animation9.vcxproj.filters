@@ -25,6 +25,9 @@
     <Filter Include="Source Files\Math\VectorType">
       <UniqueIdentifier>{648e9be2-be9e-4cd6-aab0-b2aa2907ddcf}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\FBX">
+      <UniqueIdentifier>{f29a3952-cd05-4c7e-817f-78ee877b612f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -38,6 +41,15 @@
     </ClCompile>
     <ClCompile Include="stdafx.cpp">
       <Filter>PrecompiledHeader</Filter>
+    </ClCompile>
+    <ClCompile Include="FBXLoader.cpp">
+      <Filter>Source Files\FBX</Filter>
+    </ClCompile>
+    <ClCompile Include="FBXMesh.cpp">
+      <Filter>Source Files\FBX</Filter>
+    </ClCompile>
+    <ClCompile Include="FBXAnimation.cpp">
+      <Filter>Source Files\FBX</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -57,6 +69,15 @@
     </ClInclude>
     <ClInclude Include="stdafx.h">
       <Filter>PrecompiledHeader</Filter>
+    </ClInclude>
+    <ClInclude Include="FBXLoader.h">
+      <Filter>Source Files\FBX</Filter>
+    </ClInclude>
+    <ClInclude Include="FBXMesh.h">
+      <Filter>Source Files\FBX</Filter>
+    </ClInclude>
+    <ClInclude Include="FBXAnimation.h">
+      <Filter>Source Files\FBX</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
