@@ -105,6 +105,14 @@ public:
     void ExtractMeshTangent(MeshData* pMeshData, fbxsdk::FbxMesh* pMesh);
     void ExtractMeshUV(MeshData* pMeshData, fbxsdk::FbxMesh* pMesh);
 
+    
+    bool Test(FBXMesh* pOutMesh, const std::string& file);
+    bool GetNormal(FbxVector4* outNormal, FbxMesh* mesh, int cpIndex, int polygonVertexIndex);
+    bool GetTangent(FbxVector4* outTangent, FbxMesh* mesh, int cpIndex, int polygonVertexIndex);
+    bool GetUV(FbxVector2* outUV, FbxMesh* mesh, int cpIndex, int polygonVertexIndex);
+    bool GetColor(FbxColor* outColor, FbxMesh* mesh, int cpIndex, int polygonVertexIndex);
+    
+
     void FindBones(FbxNode* node, int parentBoneIndex, FBXMesh* pOutMesh);
     void FindSkinWeight
     (
@@ -115,7 +123,10 @@ public:
     );
     void AddBoneWeight(VertexSkinData& skinData, int boneIndex, float weight);
     void NormalizeSkinWeights(std::vector<VertexSkinData>& skinData);
+
+    void SkinDataToVertexData(FBXMesh* pOutMesh, const std::vector<int>& vertexCpIndexCache);
     void SkinDataToVertexData(FBXMesh* pOutMesh);
+
     int CountMeshes(fbxsdk::FbxNode* node);
 
 
@@ -141,53 +152,6 @@ public:
 
 	SceneAxisInfo sceneAxisInfo_;
 };
-
-
-//void ProcessMesh(FbxNode* inNode) 
-//{
-//	FbxMesh* currMesh = inNode->GetMesh(); 
-//	mTriangleCount = currMesh->GetPolygonCount(); 
-//	int vertexCounter = 0; 
-//	mTriangles.reserve(mTriangleCount); 
-//	for (unsigned int i = 0; i < mTriangleCount; ++i) 
-//	{
-//		XMFLOAT3 normal[3]; 
-//		XMFLOAT3 tangent[3]; 
-//		XMFLOAT3 binormal[3]; 
-//		XMFLOAT2 UV[3][2]; 
-//		Triangle currTriangle; 
-//		mTriangles.push_back(currTriangle); 
-//		for (unsigned int j = 0; j < 3; ++j) 
-//		{
-//			int ctrlPointIndex = currMesh->GetPolygonVertex(i, j); CtrlPoint* currCtrlPoint = mControlPoints[ctrlPointIndex]; ReadNormal(currMesh, ctrlPointIndex, vertexCounter, normal[j]); 
-//			// We only have diffuse texture 
-//			for (int k = 0; k < 1; ++k) 
-//			{
-//				ReadUV(currMesh, ctrlPointIndex, currMesh->GetTextureUVIndex(i, j), k, UV[j][k]); 
-//			} 
-//			PNTIWVertex temp; 
-//			temp.mPosition = currCtrlPoint->mPosition; 
-//			temp.mNormal = normal[j]; temp.mUV = UV[j][0]; // Copy the blending info from each control point 
-//			for(unsigned int i = 0; i < currCtrlPoint->mBlendingInfo.size(); ++i)
-//			{ 
-//				VertexBlendingInfo currBlendingInfo; 
-//				currBlendingInfo.mBlendingIndex = currCtrlPoint->mBlendingInfo[i].mBlendingIndex;
-//				currBlendingInfo.mBlendingWeight = currCtrlPoint->mBlendingInfo[i].mBlendingWeight; 
-//				temp.mVertexBlendingInfos.push_back(currBlendingInfo); 
-//			} // Sort the blending info so that later we can remove // duplicated vertices 
-//			temp.SortBlendingInfoByWeight(); 
-//			mVertices.push_back(temp); 
-//			mTriangles.back().mIndices.push_back(vertexCounter); 
-//			++vertexCounter; 
-//		} 
-//	} // Now mControlPoints has served its purpose // We can free its memory 
-//	for(auto itr = mControlPoints.begin(); itr != mControlPoints.end(); ++itr) 
-//	{ 
-//		delete itr->second;
-//	} 
-//
-//	mControlPoints.clear(); 
-//}
 
 
 

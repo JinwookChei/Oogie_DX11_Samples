@@ -2,11 +2,11 @@
 #include "FBXLoader.h"
 
 FBXLoader::FBXLoader()
-	:	pManager_(nullptr)
-	,	pIOSetting_(nullptr)
-	,	pImporter_(nullptr)
-	,	pScene_(nullptr)
-	,	sceneAxisInfo_()
+	: pManager_(nullptr)
+	, pIOSetting_(nullptr)
+	, pImporter_(nullptr)
+	, pScene_(nullptr)
+	, sceneAxisInfo_()
 {
 }
 
@@ -52,6 +52,8 @@ bool FBXLoader::Init(const std::string& file)
 
 	fbxsdk::FbxGeometryConverter geomConv(pManager_);
 	geomConv.Triangulate(pScene_, true);
+
+	return true;
 }
 
 bool FBXLoader::LoadMesh(FBXMesh* pOutMesh, const std::string& file)
@@ -81,10 +83,13 @@ bool FBXLoader::LoadMesh(FBXMesh* pOutMesh, const std::string& file)
 	ExtractMeshNormal(pOutMesh->pData_, pMesh);
 	ExtractMeshTangent(pOutMesh->pData_, pMesh);
 	ExtractMeshUV(pOutMesh->pData_, pMesh);
-	
+
 	FindBones(pRootNode, -1, pOutMesh);
 	FindSkinWeight(pOutMesh, pMesh, pOutMesh->skinData_, pOutMesh->boneMap_);
 	SkinDataToVertexData(pOutMesh);
+
+	sceneAxisInfo_;
+	int k = 10;
 
 	return true;
 }
@@ -229,7 +234,7 @@ void FBXLoader::ExtractMeshNormal(MeshData* pMeshData, fbxsdk::FbxMesh* pMesh)
 			{
 			case FbxGeometryElement::eDirect:
 			{
-				DEBUG_BREAK();
+				//DEBUG_BREAK();
 			} break;
 			case FbxGeometryElement::eIndexToDirect:
 			{
@@ -375,7 +380,60 @@ void FBXLoader::ExtractMeshUV(MeshData* pMeshData, fbxsdk::FbxMesh* pMesh)
 			}
 			break;
 		case FbxGeometryElement::eByPolygonVertex:
-			switch (uvElement->GetReferenceMode())
+			if (uvElement->GetReferenceMode() == FbxGeometryElement::eDirect)
+			{
+				DEBUG_BREAK();
+
+				/*int polygonCount = pMesh->GetPolygonCount();
+				int polygonVertexCounter = 0;
+
+				for (int poly = 0; poly < polygonCount; ++poly)
+				{
+					int polySize = pMesh->GetPolygonSize(poly);
+
+					for (int vert = 0; vert < polySize; ++vert)
+					{
+						FbxVector2 uv = uvElement->GetDirectArray().GetAt(polygonVertexCounter);
+						pMeshData->meshVertices[polygonVertexCounter].uv =
+						{
+							(float)uv[0],
+							(float)uv[1]
+						};
+
+						polygonVertexCounter++;
+					}
+				}*/
+			}
+			else if (uvElement->GetReferenceMode() == FbxGeometryElement::eIndexToDirect)
+			{
+				//int polygonCount = pMesh->GetPolygonCount();
+				//int polygonVertexCounter = 0;
+
+				//for (int poly = 0; poly < polygonCount; ++poly)
+				//{
+				//	int polySize = pMesh->GetPolygonSize(poly);
+
+				//	for (int vert = 0; vert < polySize; ++vert)
+				//	{
+				//		int uvIndex = uvElement->GetIndexArray().GetAt(polygonVertexCounter);
+				//		FbxVector2 uv = uvElement->GetDirectArray().GetAt(uvIndex);
+
+				//		pMeshData->meshVertices[polygonVertexCounter].uv =
+				//		{
+				//			(float)uv[0],
+				//			(float)uv[1]
+				//		};
+
+				//		polygonVertexCounter++;
+				//	}
+				//}
+			}
+			else
+			{
+				DEBUG_BREAK();
+			}
+
+			/*switch (uvElement->GetReferenceMode())
 			{
 			case FbxGeometryElement::eDirect:
 			{
@@ -390,11 +448,339 @@ void FBXLoader::ExtractMeshUV(MeshData* pMeshData, fbxsdk::FbxMesh* pMesh)
 			default:
 				DEBUG_BREAK();
 			}
-			break;
+			break;*/
 		}
 	}
 }
 
+
+bool FBXLoader::Test(FBXMesh* pOutMesh, const std::string& file)
+{
+	if (nullptr == pOutMesh)
+	{
+		DEBUG_BREAK();
+		return false;
+	}
+
+	if (!Init(file))
+	{
+		DEBUG_BREAK();
+		return false;
+	}
+
+	pOutMesh->pData_->meshVertices.clear();
+	pOutMesh->pData_->meshIndices.clear();
+	if (pOutMesh->pData_->pVertexBuffer)
+	{
+		pOutMesh->pData_->pVertexBuffer->Release();
+		pOutMesh->pData_->pVertexBuffer = nullptr;
+	}
+	if (pOutMesh->pData_->pIndexBuffer)
+	{
+		pOutMesh->pData_->pIndexBuffer->Release();
+		pOutMesh->pData_->pIndexBuffer = nullptr;
+	}
+	pOutMesh->boneMap_.clear();
+	pOutMesh->bones_.clear();
+	pOutMesh->skinData_.clear();
+
+
+	fbxsdk::FbxNode* pRootNode = pScene_->GetRootNode();
+	int totalMeshCount = CountMeshes(pRootNode);
+	if (1 != totalMeshCount)
+	{
+		DEBUG_BREAK();
+	}
+
+	fbxsdk::FbxMesh* pMesh = FindMesh(pRootNode);
+	if (nullptr == pMesh)
+	{
+		DEBUG_BREAK();
+		return false;
+	}
+
+	int polygonCount = pMesh->GetPolygonCount();
+	FbxVector4* controlPoints = pMesh->GetControlPoints();
+
+	pOutMesh->pData_->meshVertices.reserve(polygonCount * 3);
+	pOutMesh->pData_->meshIndices.reserve(polygonCount * 3);
+
+	std::unordered_map<SimpleVertex, uint32_t> vertexCache;
+	std::vector<int> vertexCpIndexCache;
+	vertexCpIndexCache.reserve(polygonCount * 3);
+
+	
+	int polygonVertexCounter = 0;
+	for (int poly = 0; poly < polygonCount; ++poly)
+	{
+		int polySize = pMesh->GetPolygonSize(poly);
+		if (polySize != 3)
+		{
+			DEBUG_BREAK();
+		}
+
+		for (int vert = 0; vert < polySize; ++vert)
+		{
+			int cpIndex = pMesh->GetPolygonVertex(poly, vert);
+
+			// 여기서 모든 속성 추출
+			SimpleVertex v;
+			v.position.x = controlPoints[cpIndex][0];
+			v.position.y = controlPoints[cpIndex][1];
+			v.position.z = controlPoints[cpIndex][2];
+
+			FbxVector4 normal;
+			bool res1 = GetNormal(&normal, pMesh, cpIndex, polygonVertexCounter);
+			v.normal.x = normal[0];
+			v.normal.y = normal[1];
+			v.normal.z = normal[2];
+			v.normal.w = normal[3];
+
+			FbxVector4 tangent;
+			bool res2 = GetTangent(&tangent, pMesh, cpIndex, polygonVertexCounter);
+			v.tangent.x = tangent[0];
+			v.tangent.y = tangent[1];
+			v.tangent.z = tangent[2];
+			v.tangent.w = tangent[3];
+
+			FbxVector2 uv;
+			bool res3 = GetUV(&uv, pMesh, cpIndex, polygonVertexCounter);
+			v.uv.x = uv[0];
+			v.uv.y = uv[1];
+			
+			FbxColor color;
+			bool res4 = GetColor(&color, pMesh, cpIndex, polygonVertexCounter);
+			v.color.x = color.mRed;
+			v.color.y = color.mGreen;
+			v.color.z = color.mBlue;
+			v.color.w = color.mAlpha;
+			
+			polygonVertexCounter++;
+
+			uint32_t vertexIndex;
+			auto iter = vertexCache.find(v);
+			if (iter != vertexCache.end())
+			{
+				// cache에 이미 존재.
+				vertexIndex = iter->second;
+				pOutMesh->pData_->meshIndices.push_back(vertexIndex);
+			}
+			else
+			{
+				// cache에 존재 하지 않음.
+				vertexIndex = pOutMesh->pData_->meshVertices.size();
+				pOutMesh->pData_->meshVertices.push_back(v);
+				pOutMesh->pData_->meshIndices.push_back(vertexIndex);
+
+				vertexCpIndexCache.push_back(cpIndex);
+				vertexCache[v] = vertexIndex;
+			}
+		}
+	}
+
+	FindBones(pRootNode, -1, pOutMesh);
+
+	FindSkinWeight(pOutMesh, pMesh, pOutMesh->skinData_, pOutMesh->boneMap_);
+
+	SkinDataToVertexData(pOutMesh, vertexCpIndexCache);
+
+
+	int cpCount = pMesh->GetControlPointsCount();
+	int block = 9999;
+
+	return true;
+}
+
+
+bool FBXLoader::GetNormal(
+	FbxVector4* outNormal,
+	FbxMesh* mesh,
+	int cpIndex,
+	int polygonVertexIndex)
+{
+	FbxGeometryElementNormal* element = mesh->GetElementNormal();
+
+	if (!element) return false;
+		
+	int index = 0;
+
+	switch (element->GetMappingMode())
+	{
+	case FbxGeometryElement::eByControlPoint:
+		index = cpIndex;
+		break;
+
+	case FbxGeometryElement::eByPolygonVertex:
+		index = polygonVertexIndex;
+		break;
+
+	default:
+		return false;
+	}
+
+	switch (element->GetReferenceMode())
+	{
+	case FbxGeometryElement::eDirect:
+	{
+		*outNormal = element->GetDirectArray().GetAt(index);
+		return true;
+	}
+	case FbxGeometryElement::eIndexToDirect:
+	{
+		int directIndex = element->GetIndexArray().GetAt(index);
+		*outNormal = element->GetDirectArray().GetAt(directIndex);
+		return true;
+	}
+
+	default:
+		return false;
+	}
+}
+
+bool FBXLoader::GetTangent(FbxVector4* outTangent, FbxMesh* mesh, int cpIndex, int polygonVertexIndex)
+{
+	FbxGeometryElementTangent* element = mesh->GetElementTangent();
+
+	if (!element) return false;
+
+	int index = 0;
+
+	switch (element->GetMappingMode())
+	{
+	case FbxGeometryElement::eByControlPoint:
+		index = cpIndex;
+		break;
+
+	case FbxGeometryElement::eByPolygonVertex:
+		index = polygonVertexIndex;
+		break;
+
+	default:
+		return false;
+	}
+
+	switch (element->GetReferenceMode())
+	{
+	case FbxGeometryElement::eDirect:
+	{
+		*outTangent = element->GetDirectArray().GetAt(index);
+		return true;
+	}
+	case FbxGeometryElement::eIndexToDirect:
+	{
+		int directIndex = element->GetIndexArray().GetAt(index);
+		*outTangent = element->GetDirectArray().GetAt(directIndex);
+		return true;
+	}
+
+	default:
+		return false;
+	}
+}
+
+bool FBXLoader::GetUV(
+	FbxVector2* outUV,
+	FbxMesh* mesh,
+	int cpIndex,
+	int polygonVertexIndex)
+{
+	FbxGeometryElementUV* element = mesh->GetElementUV();
+
+	if (!element) return false;
+
+	int index = 0;
+	switch (element->GetMappingMode())
+	{
+	case FbxGeometryElement::eByControlPoint:
+		index = cpIndex;
+		break;
+
+	case FbxGeometryElement::eByPolygonVertex:
+		index = polygonVertexIndex;
+		break;
+
+	default:
+		return false;
+	}
+
+	switch (element->GetReferenceMode())
+	{
+	case FbxGeometryElement::eDirect:
+		*outUV = element->GetDirectArray().GetAt(index);
+		return true;
+
+	case FbxGeometryElement::eIndexToDirect:
+	{
+		int directIndex = element->GetIndexArray().GetAt(index);
+		*outUV = element->GetDirectArray().GetAt(directIndex);
+		return true;
+	}
+
+	default:
+		return false;
+	}
+}
+
+bool FBXLoader::GetColor(FbxColor* outColor, FbxMesh* mesh, int cpIndex, int polygonVertexIndex)
+{
+	if (mesh->GetElementVertexColorCount() == 0)
+	{
+		return false;
+	}
+
+	FbxGeometryElementVertexColor* element = mesh->GetElementVertexColor(0);
+	int index = 0;
+
+	switch (element->GetMappingMode())
+	{
+	case FbxGeometryElement::eByControlPoint:
+		index = cpIndex;
+		break;
+
+	case FbxGeometryElement::eByPolygonVertex:
+		index = polygonVertexIndex;
+		break;
+
+	default:
+		return false;
+	}
+
+	switch (element->GetReferenceMode())
+	{
+	case FbxGeometryElement::eDirect:
+		if (index >= element->GetDirectArray().GetCount())
+		{
+			DEBUG_BREAK();
+			return false;
+		}
+		*outColor = element->GetDirectArray().GetAt(index);
+		return true;
+
+	case FbxGeometryElement::eIndex:
+	case FbxGeometryElement::eIndexToDirect:
+	{
+		if (index >= element->GetIndexArray().GetCount())
+		{
+			DEBUG_BREAK();
+			return false;
+		}
+
+		int directIndex = element->GetIndexArray().GetAt(index);
+
+		if (directIndex >= element->GetDirectArray().GetCount())
+		{
+			DEBUG_BREAK();
+			return false;
+		}
+
+		*outColor = element->GetDirectArray().GetAt(directIndex);
+		return true;
+	}
+
+	default:
+		return false;
+	}
+}
 
 
 void FBXLoader::FindBones(FbxNode* node, int parentBoneIndex, FBXMesh* pOutMesh)
@@ -443,18 +829,15 @@ void FBXLoader::FindSkinWeight(FBXMesh* pOutMesh, FbxMesh* mesh, std::vector<Ver
 	for (int d = 0; d < deformerCount; d++)
 	{
 		FbxSkin* skin = static_cast<FbxSkin*>(mesh->GetDeformer(d, FbxDeformer::eSkin));
-
 		const int clusterCount = skin->GetClusterCount();
-		// clusterCount = 114
+
 		for (int c = 0; c < clusterCount; c++)
 		{
 			FbxCluster* cluster = skin->GetCluster(c);
 			FbxNode* boneNode = cluster->GetLink();
 
-
 			cluster->GetTransformMatrix(pOutMesh->bones_[c].meshBindPose);
 			cluster->GetTransformLinkMatrix(pOutMesh->bones_[c].boneBindPose);
-			pOutMesh->bones_[c].offsetMatrix = pOutMesh->bones_[c].boneBindPose.Inverse();
 
 			if (!boneNode) continue;
 
@@ -466,8 +849,8 @@ void FBXLoader::FindSkinWeight(FBXMesh* pOutMesh, FbxMesh* mesh, std::vector<Ver
 			int boneIndex = it->second;
 
 			// 현재 cluster에 영향받고있는 Indices들.
-			const int* indices = cluster->GetControlPointIndices();
 			const int indexCount = cluster->GetControlPointIndicesCount();	// 현재 cluster에 영향받고있는 index의 갯수
+			const int* indices = cluster->GetControlPointIndices();
 			const double* weights = cluster->GetControlPointWeights();	// index에 해당하는 weight
 
 			for (int i = 0; i < indexCount; i++)
@@ -476,7 +859,6 @@ void FBXLoader::FindSkinWeight(FBXMesh* pOutMesh, FbxMesh* mesh, std::vector<Ver
 				float weight = static_cast<float>(weights[i]);
 
 				if (weight <= 0.0f) continue;
-
 				AddBoneWeight(outSkinData[cpIndex], boneIndex, weight);
 			}
 		}
@@ -534,6 +916,16 @@ void FBXLoader::NormalizeSkinWeights(std::vector<VertexSkinData>& skinData)
 	}
 }
 
+void FBXLoader::SkinDataToVertexData(FBXMesh* pOutMesh, const std::vector<int>& vertexCpIndexCache)
+{
+	for (int i = 0; i < pOutMesh->pData_->meshVertices.size(); ++i)
+	{
+		int cpIndex = vertexCpIndexCache[i];
+		memcpy(pOutMesh->pData_->meshVertices[i].boneIndices, pOutMesh->skinData_[cpIndex].boneIndices, sizeof(UINT) * 4);
+		memcpy(pOutMesh->pData_->meshVertices[i].blendWeights, pOutMesh->skinData_[cpIndex].boneWeights, sizeof(float) * 4);
+	}
+}
+
 void FBXLoader::SkinDataToVertexData(FBXMesh* pOutMesh)
 {
 	pOutMesh->pData_->meshVertices;
@@ -541,6 +933,8 @@ void FBXLoader::SkinDataToVertexData(FBXMesh* pOutMesh)
 
 	int a = pOutMesh->pData_->meshVertices.size();
 	int b = pOutMesh->skinData_.size();
+
+
 	if (a != b)
 	{
 		DEBUG_BREAK();
@@ -659,7 +1053,7 @@ SceneAxisInfo FBXLoader::GetSceneAxisInfo(fbxsdk::FbxScene* pScene)
 	SceneAxisInfo axisInfo{};
 
 	if (!pScene) return axisInfo;
-	
+
 	fbxsdk::FbxGlobalSettings& globalSettings = pScene->GetGlobalSettings();
 	fbxsdk::FbxAxisSystem axisSystem = globalSettings.GetAxisSystem();
 

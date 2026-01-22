@@ -7,6 +7,8 @@
 #include <DirectXTex.h>
 #include <fbxsdk.h>
 #include <vector>
+#include <unordered_map>
+#include <map>
 #include <string>
 #include <sstream>
 #include <string_view>
@@ -36,4 +38,5 @@
 #include "FBXLoader.h"
 #include "FBXAnimation.h"
 #include "FBXMesh.h"
+
 

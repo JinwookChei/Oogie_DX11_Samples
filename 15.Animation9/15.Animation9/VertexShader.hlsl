@@ -80,10 +80,6 @@ PS_INPUT main(VS_INPUT input)
     {
         skinnedPos += input.blendWeights[i] * mul(float4(input.position, 1.0f), g_BoneTransforms[input.boneIndices[i]]);
     }
-    skinnedPos.x = skinnedPos.x / skinnedPos.w;
-    skinnedPos.y = skinnedPos.y / skinnedPos.w;
-    skinnedPos.z = skinnedPos.z / skinnedPos.w;
-    skinnedPos.w = skinnedPos.w / skinnedPos.w;
     
     
     float4 worldPos = mul(skinnedPos, World);

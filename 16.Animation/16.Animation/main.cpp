@@ -3,6 +3,9 @@
 #define ResolutionWidth 2560.0f
 #define	ResolutionHeigh 1440.0f
 
+constexpr int SELECT_MESH = 2;
+
+
 
 // Init
 ID3D11Device* g_pd3dDevice = nullptr;
@@ -48,9 +51,7 @@ struct ConstantBuffer
 
 struct AnimConstantBuffer
 {
-	//DirectX::XMFLOAT4X4 animTransform[114];
 	DirectX::XMMATRIX animTransform[114];
-	//FbxAMatrix animTransform[114];
 };
 
 FBXLoader* g_pFBXLoader = nullptr;
@@ -293,8 +294,8 @@ HRESULT InitInputLayout(ID3DBlob* pVSBlob)
 			{"NORMAL", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 28, D3D11_INPUT_PER_VERTEX_DATA, 0},
 			{"TANGENT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 44, D3D11_INPUT_PER_VERTEX_DATA, 0},
 			{"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 60, D3D11_INPUT_PER_VERTEX_DATA, 0},
-			{"BLENDINDICES", 0, DXGI_FORMAT_R32G32B32A32_UINT, 0, 76, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-			{"BLENDWEIGHT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 92, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+			{"BLENDINDICES", 0, DXGI_FORMAT_R32G32B32A32_UINT, 0, 68, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			{"BLENDWEIGHT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 84, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 	};
 
 	HRESULT hr = g_pd3dDevice->CreateInputLayout(layout, ARRAYSIZE(layout), pVSBlob->GetBufferPointer(), pVSBlob->GetBufferSize(), &g_pInputLayout);
@@ -470,26 +471,19 @@ HRESULT LoadWhiteTexture(ID3D11ShaderResourceView** ppOutSRV, UINT color)
 
 HRESULT InitTexture()
 {
-	//HRESULT hr = LoadWhiteTexture(&g_pTextureResourceView, 0xFFFFFFFF);
-	//if (FAILED(hr))
-	//{
-	//	DEBUG_BREAK();
-	//	return hr;
-	//}
+	const wchar_t* textureFile;
+	const wchar_t* normalFile;
+	if (SELECT_MESH == 1)
+	{
+		textureFile = L"../../Resource/fbx/Mesh/JUMPER_TextureUv1.png";
+		normalFile = L"../../Resource/fbx/Mixamo/maria_normal.png";
+	}
+	else
+	{
+		textureFile = L"../../Resource/fbx/Mixamo/maria_diffuse.png";
+		normalFile = L"../../Resource/fbx/Mixamo/maria_normal.png";
+	}
 
-	//hr = LoadWhiteTexture(&g_pNormalMapShaderResourceView, 0xFF8080FF);
-	//if (FAILED(hr))
-	//{
-	//	DEBUG_BREAK();
-	//	return hr;
-	//}
-
-	const wchar_t* textureFile = L"../../Resource/Bricks_2K/Bricks_Color.png";
-	//const wchar_t* textureFile = L"../../Resource/Bricks_4K/Bricks_Color.png";
-	//const wchar_t* textureFile = L"../../Resource/Stones_2K/Stones_Color.png";
-	//const wchar_t* textureFile = L"../../Resource/Stones_4K/Stones_Color.png";
-	//const wchar_t* textureFile = L"../../Resource/Ragnarok_Online_Acolyte.png";
-	//const wchar_t* textureFile = L"../../Resource/BrickTexture.jpg";
 	HRESULT hr = LoadTextureWithDirectXTex(g_pd3dDevice, textureFile, false, &g_pTextureResourceView);
 	if (FAILED(hr))
 	{
@@ -497,11 +491,7 @@ HRESULT InitTexture()
 		return hr;
 	}
 
-	const wchar_t* normalFile = L"../../Resource/Bricks_2K/Bricks_NormalDX.png";
-	//const wchar_t* normalFile = L"../../Resource/Bricks_4K/Bricks_NormalDX.png";
-	//const wchar_t* normalFile = L"../../Resource/Stones_2K/Stones_NormalDX.png";
-	//const wchar_t* normalFile = L"../../Resource/Stones_4K/Stones_NormalDX.png";
-	//const wchar_t* normalFile = L"../../Resource/BrickNormal.jpg";
+
 	hr = LoadTextureWithDirectXTex(g_pd3dDevice, normalFile, true, &g_pNormalMapShaderResourceView);
 	if (FAILED(hr))
 	{
@@ -549,8 +539,8 @@ HRESULT InitRasterizerState()
 	D3D11_RASTERIZER_DESC rasDesc = {};
 	//rasDesc.FillMode = D3D11_FILL_WIREFRAME;
 	rasDesc.FillMode = D3D11_FILL_SOLID;
-	//rasDesc.CullMode = D3D11_CULL_FRONT;
-	rasDesc.CullMode = D3D11_CULL_BACK;
+	rasDesc.CullMode = D3D11_CULL_FRONT;
+	//rasDesc.CullMode = D3D11_CULL_BACK;
 	rasDesc.FrontCounterClockwise = false;
 
 	HRESULT hr = g_pd3dDevice->CreateRasterizerState(&rasDesc, &g_pRasterizerState);
@@ -570,57 +560,78 @@ void UpdateConstantResource(const Transform& worldTransform)
 	DirectX::XMMATRIX scale = worldTransform.GetScaleMatrix();
 	DirectX::XMMATRIX rotation = worldTransform.GetRotationMatrix();
 	DirectX::XMMATRIX position = worldTransform.GetPositionMatrix();
-
-	// 월드, 뷰, 프로젝션 행렬 설정
-	// world는 오브젝트마다 고유의 값이며, 각각의 오브젝트의 Transform 을 적용해야함.
 	DirectX::XMMATRIX world = scale * rotation * position;
+	DirectX::XMVECTOR eye;
+	DirectX::XMVECTOR target;
+	DirectX::XMVECTOR up;
+	DirectX::XMMATRIX view;
+	DirectX::XMMATRIX projection;
+	DirectX::XMFLOAT4 lightColor;
+	DirectX::XMFLOAT4 ambientColor;
+	DirectX::XMFLOAT3 spotPosition;
+	DirectX::XMFLOAT3 spotDirection;
 
-	//DirectX::XMMATRIX view = DirectX::XMMatrixLookAtLH(DirectX::XMVectorSet(-20.0f, 0.0f, 0.0f, 0.0f), DirectX::XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f), DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f));
-	//DirectX::XMMATRIX projection = DirectX::XMMatrixPerspectiveFovLH(DirectX::XM_PIDIV4, ResolutionWidth / ResolutionHeigh, 0.01f, 1000.0f);
+	if (SELECT_MESH == 1)
+	{
+		// [FBX Scene World Orientation] 
+		// ------------------------------------
+		// 	오른쪽(RIGHT) : -X
+		// 	앞쪽(FRONT) : -Y
+		// 	위쪽(UP) : +Z
+
+		// 	------------------------------------
+		// 	좌표계 : 오른손(Right - Handed)
+		// 
+		// 카메라 정면
+		eye = DirectX::XMVectorSet(0, 20, 0, 1);
+		target = DirectX::XMVectorAdd(eye, DirectX::XMVectorSet(0, -1, 0, 0)); // FRONT = -Y
+		up = DirectX::XMVectorSet(0, 0, 1, 0);			// UP = +Z
+		view = DirectX::XMMatrixLookAtRH(eye, target, up);
+		projection = DirectX::XMMatrixPerspectiveFovRH(DirectX::XM_PIDIV4, ResolutionWidth / ResolutionHeigh, 0.01f, 1000.0f);
+
+		// 카메라 측면
+		//DirectX::XMVECTOR eye = DirectX::XMVectorSet(-20, 0, 0, 1);
+		//DirectX::XMVECTOR target = DirectX::XMVectorSet(0, 0, 0, 0);
+		//DirectX::XMVECTOR up = DirectX::XMVectorSet(0, 0, 1, 0);			// UP = +Z
+		//DirectX::XMMATRIX view = DirectX::XMMatrixLookAtRH(eye, target, up);
+		//DirectX::XMMATRIX projection = DirectX::XMMatrixPerspectiveFovRH(DirectX::XM_PIDIV4, ResolutionWidth / ResolutionHeigh, 0.01f, 1000.0f);
+
+		// 카메라 후면
+		//DirectX::XMVECTOR eye = DirectX::XMVectorSet(0, -30, 0, 1);
+		//DirectX::XMVECTOR target = DirectX::XMVectorSet(0, 0, 0, 0);
+		//DirectX::XMVECTOR up = DirectX::XMVectorSet(0, 0, 1, 0);			// UP = +Z
+		//DirectX::XMMATRIX view = DirectX::XMMatrixLookAtRH(eye, target, up);
+		//DirectX::XMMATRIX projection = DirectX::XMMatrixPerspectiveFovRH(DirectX::XM_PIDIV4, ResolutionWidth / ResolutionHeigh, 0.01f, 1000.0f);
+
+		// Spot Light
+		lightColor = DirectX::XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+		ambientColor = DirectX::XMFLOAT4(0.3f, 0.3f, 0.3f, 0.3f);
+		spotPosition = DirectX::XMFLOAT3(-5.0f, 4.8f, 2.5f);
+		spotDirection = DirectX::XMFLOAT3(0.0f, -1.0f, 0.0f);
+	}
+	else
+	{
+		// [FBX Scene World Orientation] 
+		// ------------------------------------
+		// 	앞쪽(FRONT) : +X
+		// 	위쪽(UP) : +Y
+		// 	오른쪽(RIGHT) : +Z
+		// 	------------------------------------
+		// 	좌표계 : 오른손(Right - Handed)
+
+		// 카메라 정면
+		eye = DirectX::XMVectorSet(-50, 0, 0, 1);
+		target = DirectX::XMVectorAdd(eye, DirectX::XMVectorSet(1, 0, 0, 0)); // FRONT = -Y
+		up = DirectX::XMVectorSet(0, 1, 0, 0);			// UP = +Z
+		view = DirectX::XMMatrixLookAtRH(eye, target, up);
+		projection = DirectX::XMMatrixPerspectiveFovRH(DirectX::XM_PIDIV4, ResolutionWidth / ResolutionHeigh, 0.01f, 1000.0f);
 
 
-	// [FBX Scene World Orientation] 
-	// ------------------------------------
-	// 	위쪽(UP) : +Z
-	// 	앞쪽(FRONT) : -Y
-	// 	오른쪽(RIGHT) : -X
-	// 	------------------------------------
-	// 	좌표계 : 오른손(Right - Handed)
-	
-	// 카메라 정면
-	DirectX::XMVECTOR eye = DirectX::XMVectorSet(0, 20, 0, 1);
-	DirectX::XMVECTOR target = DirectX::XMVectorAdd(eye, DirectX::XMVectorSet(0, -1, 0, 0)); // FRONT = -Y
-	DirectX::XMVECTOR up = DirectX::XMVectorSet(0, 0, 1, 0);			// UP = +Z
-	DirectX::XMMATRIX view = DirectX::XMMatrixLookAtRH(eye, target, up);
-	DirectX::XMMATRIX projection = DirectX::XMMatrixPerspectiveFovRH(DirectX::XM_PIDIV4, ResolutionWidth / ResolutionHeigh, 0.01f, 1000.0f);
-
-
-	// 카메라 측면
-	//DirectX::XMVECTOR eye = DirectX::XMVectorSet(-20, 0, 0, 1);
-	//DirectX::XMVECTOR target = DirectX::XMVectorSet(0, 0, 0, 0);
-	//DirectX::XMVECTOR up = DirectX::XMVectorSet(0, 0, 1, 0);			// UP = +Z
-	//DirectX::XMMATRIX view = DirectX::XMMatrixLookAtRH(eye, target, up);
-	//DirectX::XMMATRIX projection = DirectX::XMMatrixPerspectiveFovRH(DirectX::XM_PIDIV4, ResolutionWidth / ResolutionHeigh, 0.01f, 1000.0f);
-
-	// 카메라 후면
-	//DirectX::XMVECTOR eye = DirectX::XMVectorSet(0, -20, 0, 1);
-	//DirectX::XMVECTOR target = DirectX::XMVectorSet(0, 0, 0, 0);
-	//DirectX::XMVECTOR up = DirectX::XMVectorSet(0, 0, 1, 0);			// UP = +Z
-	//DirectX::XMMATRIX view = DirectX::XMMatrixLookAtRH(eye, target, up);
-	//DirectX::XMMATRIX projection = DirectX::XMMatrixPerspectiveFovRH(DirectX::XM_PIDIV4, ResolutionWidth / ResolutionHeigh, 0.01f, 1000.0f);
-
-
-	// Spot Light
-	//DirectX::XMFLOAT4 lightColor = DirectX::XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
-	//DirectX::XMFLOAT4 ambientColor = DirectX::XMFLOAT4(0.3f, 0.3f, 0.3f, 0.3f);
-	//DirectX::XMFLOAT3 spotPosition = DirectX::XMFLOAT3(-5.0f, -4.8f, 2.5f);
-	//DirectX::XMFLOAT3 spotDirection = DirectX::XMFLOAT3(1.0f, 0.0f, 0.0f);
-
-	DirectX::XMFLOAT4 lightColor = DirectX::XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
-	DirectX::XMFLOAT4 ambientColor = DirectX::XMFLOAT4(0.3f, 0.3f, 0.3f, 0.3f);
-	DirectX::XMFLOAT3 spotPosition = DirectX::XMFLOAT3(-3.0f, 10.0f, 2.5f);
-	DirectX::XMFLOAT3 spotDirection = DirectX::XMFLOAT3(0.0f, -1.0f, 0.0f);
-
+		lightColor = DirectX::XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+		ambientColor = DirectX::XMFLOAT4(0.3f, 0.3f, 0.3f, 0.3f);
+		spotPosition = DirectX::XMFLOAT3(-8.0f, 0.0f, 7.0f);
+		spotDirection = DirectX::XMFLOAT3(1.0f, 0.0f, 0.0f);
+	}
 
 	float spotRange = 30.0f;
 	float spotAngle = cosf(DirectX::XMConvertToRadians(30.0f));
@@ -711,37 +722,37 @@ void BeginPlay()
 	g_pAnimation = new FBXAnimation;
 	g_pFBXLoader = new FBXLoader;
 
-	g_pFBXLoader->LoadMesh(g_pMesh, "..\\..\\Resource\\Fbx\\Mesh\\JUMPER_MESH.FBX");
-	g_pFBXLoader->LoadAnimation(g_pAnimation, "..\\..\\Resource\\Fbx\\Animation\\JUMPER_IDLE.FBX");
 
-	// ("..\\..\\Resource\\fbx\\Mannequin.FBX")
-	// ("..\\..\\Resource\\fbx\\AnimMan.FBX")
-	// ("..\\..\\Resource\\fbx\\SK_Troll.FBX")
-	// ("..\\..\\Resource\\fbx\\SK_Barbarian_Body.FBX")
-	// ("..\\..\\Resource\\Fbx\\Mesh\\JUMPER_MESH.FBX")
-	// g_pFBXLoader->LoadMesh(g_pMesh, "..\\..\\Resource\\Fbx\\Mesh\\JUMPER_MESH.FBX");
-	// g_pFBXLoader->LoadAnimation(g_pAnimation, "..\\..\\Resource\\Fbx\\Animation\\JUMPER_IDLE.FBX");
+	if (SELECT_MESH == 1)
+	{
+		// 이걸로 했을때는 Light 적용이 안됨. 노말이 다른가??
+		// vertices = 23349
+		// indices = 52224
+		g_pFBXLoader->Test(g_pMesh, "..\\..\\Resource\\Fbx\\Mesh\\JUMPER_MESH.FBX");
+		g_pFBXLoader->LoadAnimation(g_pAnimation, "..\\..\\Resource\\Fbx\\Animation\\JUMPER_IDLE.FBX");
+
+		// 이걸로 했을때는 Light 적용이 됨.
+		// vertices = 23507
+		// indices = 52224
+		// g_pFBXLoader->LoadMesh(g_pMesh, "..\\..\\Resource\\Fbx\\Mesh\\JUMPER_MESH.FBX");
+		// g_pFBXLoader->LoadAnimation(g_pAnimation, "..\\..\\Resource\\Fbx\\Animation\\JUMPER_IDLE.FBX");
+		int block = 999;
+	}
+	else
+	{
+		// vertices = 9584
+		// indices = 43698
+		g_pFBXLoader->Test(g_pMesh, "..\\..\\Resource\\Fbx\\Mixamo\\Capoeira.fbx");
+		g_pFBXLoader->LoadAnimation(g_pAnimation, "..\\..\\Resource\\Fbx\\Mixamo\\Capoeira.fbx");
 
 
-	//g_pFBXLoader->Init("..\\..\\Resource\\Fbx\\Dragon\\Dragon.FBX");
-	//g_pFBXLoader->Init("..\\..\\Resource\\Fbx\\Mesh\\JUMPER_MESH.FBX");
-	//g_pFBXLoader->sceneAxisInfo_;
-	//g_pFBXLoader->sceneAxisInfo_.PrintSceneAxisInfo();
+		// vertices = 8094
+		// indices = 43698
+		//g_pFBXLoader->LoadMesh(g_pMesh, "..\\..\\Resource\\Fbx\\Mixamo\\Capoeira.fbx");
+		//g_pFBXLoader->LoadAnimation(g_pAnimation, "..\\..\\Resource\\Fbx\\Mixamo\\Capoeira.fbx");
 
-
-	g_pFBXLoader;
-	g_pMesh->boneMap_;
-	g_pMesh->bones_;
-	g_pMesh->skinData_;
-	g_pMesh->pData_;
-
-	g_pAnimation;
-	g_pAnimation->animationClip_;
-	g_pAnimation->animationClip_.boneAnimations;
-	g_pAnimation->animationClip_.duration;
-	g_pAnimation->animationClip_.frameRate;
-	g_pAnimation->animationClip_.name;
-	
+		int block = 999;
+	}
 
 	InitMesh();
 
@@ -757,7 +768,7 @@ void BeginPlay()
 
 	InitRasterizerState();
 
-	IASetting();	
+	IASetting();
 
 	VSSetting();
 
@@ -797,7 +808,7 @@ void UpdateAnimation
 			currentTime = clip.duration;
 		}
 	}
-	
+
 	const int boneCount = player.bones_.size();
 	outFinalBoneMatrices.resize(boneCount);
 
@@ -812,7 +823,7 @@ void UpdateAnimation
 
 		for (size_t k = 0; k + 1 < boneAnim.keyframes.size(); ++k)
 		{
-			if (currentTime >= boneAnim.keyframes[k].time.GetSecondDouble() 
+			if (currentTime >= boneAnim.keyframes[k].time.GetSecondDouble()
 				&& currentTime <= boneAnim.keyframes[k + 1].time.GetSecondDouble())
 			{
 				k0 = &boneAnim.keyframes[k];
@@ -873,7 +884,7 @@ DirectX::XMFLOAT4X4 ConvertToXMFLOAT4X4(const FbxAMatrix& m)
 void Update()
 {
 	std::vector<FbxAMatrix> finalBoneMatrices;
-	UpdateAnimation(*g_pMesh, *g_pAnimation, 0.005, finalBoneMatrices);
+	UpdateAnimation(*g_pMesh, *g_pAnimation, 0.01, finalBoneMatrices);
 
 	AnimConstantBuffer cb = {};
 	for (int i = 0; i < finalBoneMatrices.size(); ++i)
@@ -893,28 +904,48 @@ void RenderBegin()
 	g_pImmediateContext->ClearDepthStencilView(g_pDepthStencilView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 }
 
+
 void Render()
 {
-	// ------------------------------------
-	// 	위쪽(UP) : +Z
-	// 	앞쪽(FRONT) : -Y
-	// 	오른쪽(RIGHT) : -X
-	// 	------------------------------------
+	if (SELECT_MESH == 1)
+	{
+		// 	오른쪽(RIGHT) : -X
+		// 	앞쪽(FRONT) : -Y
+		// 	위쪽(UP) : +Z
+		Transform tf1;
+		tf1.SetScale({ 1.0f, 1.0f, 1.0f });
+		tf1.SetRotation({ 0.0f, 0.0f, 3.0f });
+		tf1.SetPosition({ 3.0f,  0.0f, 0.0f });
+		UpdateConstantResource(tf1);
+		g_pImmediateContext->DrawIndexed(g_pMesh->pData_->meshIndices.size(), 0, 0);
 
-	Transform tf1;
-	tf1.SetScale({ 1.0f, 1.0f, 1.0f });
-	tf1.SetRotation({ 0.0f, 0.0f, 0.0f});
-	tf1.SetPosition({ -3.0f,  0.0f, 0.0f });
-	UpdateConstantResource(tf1);
-	g_pImmediateContext->DrawIndexed(g_pMesh->pData_->meshIndices.size(), 0, 0);
 
+		Transform tf2;
+		tf2.SetScale({ 1.0f, 1.0f, 1.0f });
+		tf2.SetRotation({ 0.0f, 0.0f, 3.0f });
+		tf2.SetPosition({ -3.0f, 0.0f, 0.0f });
+		UpdateConstantResource(tf2);
+		g_pImmediateContext->DrawIndexed(g_pMesh->pData_->meshIndices.size(), 0, 0);
+	}
+	else
+	{
+		// 	앞쪽(FRONT) : +X
+		// 	위쪽(UP) : +Y
+		// 	오른쪽(RIGHT) : +Z
+		Transform tf1;
+		tf1.SetScale({ 0.1f, 0.1f, 0.1f });
+		tf1.SetRotation({ 0.0f, -1.9f, 0.0f });
+		tf1.SetPosition({ 0.0f, -8.0f, -10.0f });
+		UpdateConstantResource(tf1);
+		g_pImmediateContext->DrawIndexed(g_pMesh->pData_->meshIndices.size(), 0, 0);
 
-	Transform tf2;
-	tf2.SetScale({ 1.0f, 1.0f, 1.0f });
-	tf2.SetRotation({ 0.0f, 0.0f, 0.0f});
-	tf2.SetPosition({ 3.0f, 0.0f, 0.0f });
-	UpdateConstantResource(tf2);
-	g_pImmediateContext->DrawIndexed(g_pMesh->pData_->meshIndices.size(), 0, 0);
+		Transform tf2;
+		tf2.SetScale({ 0.1f, 0.1f, 0.1f });
+		tf2.SetRotation({ 0.0f, -1.9f, 0.0f });
+		tf2.SetPosition({ 0.0f, -8.0f, 10.0f });
+		UpdateConstantResource(tf2);
+		g_pImmediateContext->DrawIndexed(g_pMesh->pData_->meshIndices.size(), 0, 0);
+	}
 }
 
 void RenderEnd()

@@ -292,8 +292,8 @@ HRESULT InitInputLayout(ID3DBlob* pVSBlob)
 			{"NORMAL", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 28, D3D11_INPUT_PER_VERTEX_DATA, 0},
 			{"TANGENT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 44, D3D11_INPUT_PER_VERTEX_DATA, 0},
 			{"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 60, D3D11_INPUT_PER_VERTEX_DATA, 0},
-			{"BLENDINDICES", 0, DXGI_FORMAT_R32G32B32A32_UINT, 0, 76, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-			{"BLENDWEIGHT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 92, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+			{"BLENDINDICES", 0, DXGI_FORMAT_R32G32B32A32_UINT, 0, 68, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			{"BLENDWEIGHT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 84, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 	};
 
 	HRESULT hr = g_pd3dDevice->CreateInputLayout(layout, ARRAYSIZE(layout), pVSBlob->GetBufferPointer(), pVSBlob->GetBufferSize(), &g_pInputLayout);
@@ -483,12 +483,13 @@ HRESULT InitTexture()
 	//	return hr;
 	//}
 
-	const wchar_t* textureFile = L"../../Resource/Bricks_2K/Bricks_Color.png";
+	//const wchar_t* textureFile = L"../../Resource/Bricks_2K/Bricks_Color.png";
 	//const wchar_t* textureFile = L"../../Resource/Bricks_4K/Bricks_Color.png";
 	//const wchar_t* textureFile = L"../../Resource/Stones_2K/Stones_Color.png";
 	//const wchar_t* textureFile = L"../../Resource/Stones_4K/Stones_Color.png";
 	//const wchar_t* textureFile = L"../../Resource/Ragnarok_Online_Acolyte.png";
 	//const wchar_t* textureFile = L"../../Resource/BrickTexture.jpg";
+	const wchar_t* textureFile = L"../../Resource/fbx/Mesh/JUMPER_TextureUv1.png";
 	HRESULT hr = LoadTextureWithDirectXTex(g_pd3dDevice, textureFile, false, &g_pTextureResourceView);
 	if (FAILED(hr))
 	{
@@ -679,6 +680,7 @@ void BeginPlay()
 	g_pFBXLoader->LoadMesh(g_pMesh, "..\\..\\Resource\\Fbx\\Mesh\\JUMPER_MESH.FBX");
 	g_pFBXLoader->LoadAnimation(g_pAnimation, "..\\..\\Resource\\Fbx\\Animation\\JUMPER_IDLE.FBX");
 
+
 	g_pMesh;
 	g_pAnimation;
 
@@ -815,7 +817,7 @@ DirectX::XMFLOAT4X4 ConvertToXMFLOAT4X4(const FbxAMatrix& m)
 void Update()
 {
 	std::vector<FbxAMatrix> finalBoneMatrices;
-	UpdateAnimation(*g_pMesh, *g_pAnimation, 0.005, finalBoneMatrices);
+	UpdateAnimation(*g_pMesh, *g_pAnimation, 0.05, finalBoneMatrices);
 
 	AnimConstantBuffer cb = {};
 	for (int i = 0; i < finalBoneMatrices.size(); ++i)
@@ -835,11 +837,16 @@ void RenderBegin()
 	g_pImmediateContext->ClearDepthStencilView(g_pDepthStencilView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 }
 
+
+float g_fRotaionAngle = 0.0f;
 void Render()
 {
+
+	g_fRotaionAngle += 0.03f;
+
 	Transform tf1;
 	tf1.SetScale({ 1.0f, 1.0f, 1.0f });
-	tf1.SetRotation({ 0.0f, 0.0f, -90.0f});
+	tf1.SetRotation({ 0.0f, 0.0f, - 90.0f});
 	tf1.SetPosition({ 0.0f, -5.0f, -0.0f });
 	UpdateConstantResource(tf1);
 	g_pImmediateContext->DrawIndexed(g_pMesh->pData_->meshIndices.size(), 0, 0);
@@ -847,7 +854,7 @@ void Render()
 
 	Transform tf2;
 	tf2.SetScale({ 1.0f, 1.0f, 1.0f });
-	tf2.SetRotation({ 0.0f, 0.0f, 90.0f});
+	tf2.SetRotation({ 0.0f, 0.0f, g_fRotaionAngle});
 	tf2.SetPosition({ 0.0f, 5.0f, -0.0f });
 	UpdateConstantResource(tf2);
 	g_pImmediateContext->DrawIndexed(g_pMesh->pData_->meshIndices.size(), 0, 0);
