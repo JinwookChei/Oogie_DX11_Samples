@@ -109,7 +109,8 @@ public:
     bool Test(FBXMesh* pOutMesh, const std::string& file);
     bool GetNormal(FbxVector4* outNormal, FbxMesh* mesh, int cpIndex, int polygonVertexIndex);
     bool GetTangent(FbxVector4* outTangent, FbxMesh* mesh, int cpIndex, int polygonVertexIndex);
-    bool GetUV(FbxVector2* outUV, FbxMesh* mesh, int cpIndex, int polygonVertexIndex);
+    bool GetUV_v1(FbxVector2* outUV, FbxMesh* mesh, int cpIndex, int polygonVertexIndex);
+    bool GetUV_v2(FbxVector2* outUV, FbxMesh* mesh, int polyIndex, int vertexIndex);
     bool GetColor(FbxColor* outColor, FbxMesh* mesh, int cpIndex, int polygonVertexIndex);
     
 

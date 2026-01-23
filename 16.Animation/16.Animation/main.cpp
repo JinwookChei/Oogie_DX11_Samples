@@ -6,7 +6,6 @@
 constexpr int SELECT_MESH = 2;
 
 
-
 // Init
 ID3D11Device* g_pd3dDevice = nullptr;
 ID3D11DeviceContext* g_pImmediateContext = nullptr; // Device Context
@@ -748,8 +747,8 @@ void BeginPlay()
 
 		// vertices = 8094
 		// indices = 43698
-		//g_pFBXLoader->LoadMesh(g_pMesh, "..\\..\\Resource\\Fbx\\Mixamo\\Capoeira.fbx");
-		//g_pFBXLoader->LoadAnimation(g_pAnimation, "..\\..\\Resource\\Fbx\\Mixamo\\Capoeira.fbx");
+		// g_pFBXLoader->LoadMesh(g_pMesh, "..\\..\\Resource\\Fbx\\Mixamo\\Capoeira.fbx");
+		// g_pFBXLoader->LoadAnimation(g_pAnimation, "..\\..\\Resource\\Fbx\\Mixamo\\Capoeira.fbx");
 
 		int block = 999;
 	}

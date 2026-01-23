@@ -544,9 +544,10 @@ bool FBXLoader::Test(FBXMesh* pOutMesh, const std::string& file)
 			v.tangent.w = tangent[3];
 
 			FbxVector2 uv;
-			bool res3 = GetUV(&uv, pMesh, cpIndex, polygonVertexCounter);
+			bool res3 = GetUV_v1(&uv, pMesh, cpIndex, polygonVertexCounter);
+			//bool res3 = GetUV_v2(&uv, pMesh, poly, vert);
 			v.uv.x = uv[0];
-			v.uv.y = uv[1];
+			v.uv.y = 1.0f - uv[1];
 			
 			FbxColor color;
 			bool res4 = GetColor(&color, pMesh, cpIndex, polygonVertexCounter);
@@ -678,13 +679,20 @@ bool FBXLoader::GetTangent(FbxVector4* outTangent, FbxMesh* mesh, int cpIndex, i
 	}
 }
 
-bool FBXLoader::GetUV(
+
+bool FBXLoader::GetUV_v1(
 	FbxVector2* outUV,
 	FbxMesh* mesh,
 	int cpIndex,
 	int polygonVertexIndex)
 {
-	FbxGeometryElementUV* element = mesh->GetElementUV();
+	int uvElementCnt = mesh->GetElementUVCount();
+	if (uvElementCnt != 1)
+	{
+		DEBUG_BREAK();
+	}
+
+	FbxGeometryElementUV* element = mesh->GetElementUV(0);
 
 	if (!element) return false;
 
@@ -692,13 +700,15 @@ bool FBXLoader::GetUV(
 	switch (element->GetMappingMode())
 	{
 	case FbxGeometryElement::eByControlPoint:
+	{
 		index = cpIndex;
 		break;
-
+	}
 	case FbxGeometryElement::eByPolygonVertex:
+	{
 		index = polygonVertexIndex;
 		break;
-
+	}
 	default:
 		return false;
 	}
@@ -706,20 +716,45 @@ bool FBXLoader::GetUV(
 	switch (element->GetReferenceMode())
 	{
 	case FbxGeometryElement::eDirect:
+	{
 		*outUV = element->GetDirectArray().GetAt(index);
 		return true;
-
+	}
 	case FbxGeometryElement::eIndexToDirect:
 	{
 		int directIndex = element->GetIndexArray().GetAt(index);
 		*outUV = element->GetDirectArray().GetAt(directIndex);
 		return true;
 	}
-
 	default:
 		return false;
 	}
 }
+
+
+bool FBXLoader::GetUV_v2(FbxVector2* outUV, FbxMesh* mesh, int polyIndex, int vertexIndex)
+{
+	int uvElementCnt = mesh->GetElementUVCount();
+	if (uvElementCnt != 1)
+	{
+		DEBUG_BREAK();
+		return false;
+	}
+
+	FbxGeometryElementUV* element = mesh->GetElementUV(0);
+	const char* uvSetName = element->GetName();
+
+	bool unMapped;
+	bool res = mesh->GetPolygonVertexUV(polyIndex, vertexIndex, uvSetName, *outUV, unMapped);
+	if (false == res)
+	{
+		DEBUG_BREAK();
+		return false;
+	}
+
+	return true;
+}
+
 
 bool FBXLoader::GetColor(FbxColor* outColor, FbxMesh* mesh, int cpIndex, int polygonVertexIndex)
 {
