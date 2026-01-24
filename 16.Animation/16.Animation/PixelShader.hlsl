@@ -57,5 +57,4 @@ float4 main(PS_INPUT input) : SV_TARGET
     finalColor.a = colorTex.a; // 텍스처 알파 사용
     
     return finalColor;
-    //return input.color;
 }

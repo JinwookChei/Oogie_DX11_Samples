@@ -56,7 +56,7 @@ bool FBXLoader::Init(const std::string& file)
 	return true;
 }
 
-bool FBXLoader::LoadMesh(FBXMesh* pOutMesh, const std::string& file)
+bool FBXLoader::LoadMesh_V1(FBXMesh* pOutMesh, const std::string& file)
 {
 	if (!Init(file))
 	{
@@ -454,7 +454,7 @@ void FBXLoader::ExtractMeshUV(MeshData* pMeshData, fbxsdk::FbxMesh* pMesh)
 }
 
 
-bool FBXLoader::Test(FBXMesh* pOutMesh, const std::string& file)
+bool FBXLoader::LoadMesh_V2(FBXMesh* pOutMesh, const std::string& file)
 {
 	if (nullptr == pOutMesh)
 	{
@@ -509,7 +509,8 @@ bool FBXLoader::Test(FBXMesh* pOutMesh, const std::string& file)
 	std::vector<int> vertexCpIndexCache;
 	vertexCpIndexCache.reserve(polygonCount * 3);
 
-	
+
+	bool isExistTangent;
 	int polygonVertexCounter = 0;
 	for (int poly = 0; poly < polygonCount; ++poly)
 	{
@@ -529,6 +530,19 @@ bool FBXLoader::Test(FBXMesh* pOutMesh, const std::string& file)
 			v.position.y = controlPoints[cpIndex][1];
 			v.position.z = controlPoints[cpIndex][2];
 
+			FbxColor color;
+			bool res4 = GetColor(&color, pMesh, cpIndex, polygonVertexCounter);
+			v.color.x = color.mRed;
+			v.color.y = color.mGreen;
+			v.color.z = color.mBlue;
+			v.color.w = color.mAlpha;
+
+			FbxVector2 uv;
+			bool res3 = GetUV_v1(&uv, pMesh, cpIndex, polygonVertexCounter);
+			//bool res3 = GetUV_v2(&uv, pMesh, poly, vert);
+			v.uv.x = uv[0];
+			v.uv.y = 1.0f - uv[1];
+
 			FbxVector4 normal;
 			bool res1 = GetNormal(&normal, pMesh, cpIndex, polygonVertexCounter);
 			v.normal.x = normal[0];
@@ -537,27 +551,17 @@ bool FBXLoader::Test(FBXMesh* pOutMesh, const std::string& file)
 			v.normal.w = normal[3];
 
 			FbxVector4 tangent;
-			bool res2 = GetTangent(&tangent, pMesh, cpIndex, polygonVertexCounter);
+			bool res2 = GetTangent(&tangent, &isExistTangent, pMesh, cpIndex, polygonVertexCounter);
 			v.tangent.x = tangent[0];
 			v.tangent.y = tangent[1];
 			v.tangent.z = tangent[2];
 			v.tangent.w = tangent[3];
 
-			FbxVector2 uv;
-			bool res3 = GetUV_v1(&uv, pMesh, cpIndex, polygonVertexCounter);
-			//bool res3 = GetUV_v2(&uv, pMesh, poly, vert);
-			v.uv.x = uv[0];
-			v.uv.y = 1.0f - uv[1];
-			
-			FbxColor color;
-			bool res4 = GetColor(&color, pMesh, cpIndex, polygonVertexCounter);
-			v.color.x = color.mRed;
-			v.color.y = color.mGreen;
-			v.color.z = color.mBlue;
-			v.color.w = color.mAlpha;
-			
+			//
 			polygonVertexCounter++;
 
+
+			// 중복되는 Vertex들 최적화.
 			uint32_t vertexIndex;
 			auto iter = vertexCache.find(v);
 			if (iter != vertexCache.end())
@@ -579,15 +583,16 @@ bool FBXLoader::Test(FBXMesh* pOutMesh, const std::string& file)
 		}
 	}
 
+	if (false == isExistTangent)
+	{
+		CalculateTangent(pOutMesh->pData_->meshVertices, pOutMesh->pData_->meshIndices);
+	}
+
 	FindBones(pRootNode, -1, pOutMesh);
 
 	FindSkinWeight(pOutMesh, pMesh, pOutMesh->skinData_, pOutMesh->boneMap_);
 
 	SkinDataToVertexData(pOutMesh, vertexCpIndexCache);
-
-
-	int cpCount = pMesh->GetControlPointsCount();
-	int block = 9999;
 
 	return true;
 }
@@ -601,21 +606,28 @@ bool FBXLoader::GetNormal(
 {
 	FbxGeometryElementNormal* element = mesh->GetElementNormal();
 
-	if (!element) return false;
+	if (!element)
+	{
+		DEBUG_BREAK();
+		return false;
+	}
 		
 	int index = 0;
 
 	switch (element->GetMappingMode())
 	{
 	case FbxGeometryElement::eByControlPoint:
+	{
 		index = cpIndex;
 		break;
-
+	}
 	case FbxGeometryElement::eByPolygonVertex:
+	{
 		index = polygonVertexIndex;
 		break;
-
+	}
 	default:
+		DEBUG_BREAK();
 		return false;
 	}
 
@@ -634,29 +646,40 @@ bool FBXLoader::GetNormal(
 	}
 
 	default:
+		DEBUG_BREAK();
 		return false;
 	}
 }
 
-bool FBXLoader::GetTangent(FbxVector4* outTangent, FbxMesh* mesh, int cpIndex, int polygonVertexIndex)
+bool FBXLoader::GetTangent(FbxVector4* outTangent, bool* isExistTangent, FbxMesh* mesh, int cpIndex, int polygonVertexIndex)
 {
 	FbxGeometryElementTangent* element = mesh->GetElementTangent();
+	if (nullptr == element)
+	{
+		*isExistTangent = false;
+		return false;
+	}
+	else
+	{
+		*isExistTangent = true;
+	}
 
-	if (!element) return false;
 
 	int index = 0;
-
 	switch (element->GetMappingMode())
 	{
 	case FbxGeometryElement::eByControlPoint:
+	{
 		index = cpIndex;
 		break;
-
+	}
 	case FbxGeometryElement::eByPolygonVertex:
+	{
 		index = polygonVertexIndex;
 		break;
-
+	}
 	default:
+		DEBUG_BREAK();
 		return false;
 	}
 
@@ -675,7 +698,97 @@ bool FBXLoader::GetTangent(FbxVector4* outTangent, FbxMesh* mesh, int cpIndex, i
 	}
 
 	default:
+		DEBUG_BREAK();
 		return false;
+	}
+}
+
+void FBXLoader::CalculateTangent(std::vector<SimpleVertex>& vertices, const std::vector<WORD>& indices)
+{
+	const size_t vertexCount = vertices.size();
+	
+	std::vector<DirectX::XMVECTOR> tanSum(vertexCount, DirectX::XMVectorZero());
+	std::vector<DirectX::XMVECTOR> bitanSum(vertexCount, DirectX::XMVectorZero());
+
+	// 1. 삼각형 단위 누적
+	for (size_t i = 0; i < indices.size(); i += 3)
+	{
+		uint32_t i0 = indices[i + 0];
+		uint32_t i1 = indices[i + 1];
+		uint32_t i2 = indices[i + 2];
+
+		const SimpleVertex& v0 = vertices[i0];
+		const SimpleVertex& v1 = vertices[i1];
+		const SimpleVertex& v2 = vertices[i2];
+
+		DirectX::XMVECTOR P0 = DirectX::XMLoadFloat3(&v0.position);
+		DirectX::XMVECTOR P1 = DirectX::XMLoadFloat3(&v1.position);
+		DirectX::XMVECTOR P2 = DirectX::XMLoadFloat3(&v2.position);
+
+		DirectX::XMVECTOR UV0 = DirectX::XMLoadFloat2(&v0.uv);
+		DirectX::XMVECTOR UV1 = DirectX::XMLoadFloat2(&v1.uv);
+		DirectX::XMVECTOR UV2 = DirectX::XMLoadFloat2(&v2.uv);
+
+		DirectX::XMVECTOR P0_to_P1 = DirectX::XMVectorSubtract(P1, P0);
+		DirectX::XMVECTOR P0_to_P2 = DirectX::XMVectorSubtract(P2, P0);
+
+		DirectX::XMVECTOR UV0_to_UV1 = DirectX::XMVectorSubtract(UV1, UV0);
+		DirectX::XMVECTOR UV0_to_UV2 = DirectX::XMVectorSubtract(UV2, UV0);
+
+		DirectX::XMFLOAT2 duv1, duv2;
+		DirectX::XMStoreFloat2(&duv1, UV0_to_UV1);
+		DirectX::XMStoreFloat2(&duv2, UV0_to_UV2);
+
+		float denom = duv1.x * duv2.y - duv2.x * duv1.y;
+		if (fabs(denom) < 1e-6f) continue;
+
+		float f = 1.0f / denom;
+	
+		//DirectX::XMVECTOR T = (Edge1 * duv2.y - Edge2 * duv1.y) * f;
+		DirectX::XMVECTOR T = 
+			DirectX::XMVectorScale(DirectX::XMVectorSubtract(DirectX::XMVectorScale(P0_to_P1, duv2.y), DirectX::XMVectorScale(P0_to_P2, duv1.y)), f);
+
+		//DirectX::XMVECTOR B = (Edge2 * duv1.x - Edge1 * duv2.x) * f;
+		DirectX::XMVECTOR B = 
+			DirectX::XMVectorScale(DirectX::XMVectorSubtract(DirectX::XMVectorScale(P0_to_P2, duv1.x), DirectX::XMVectorScale(P0_to_P1, duv2.x)), f);
+
+		//tanSum[i0] += T; 
+		//tanSum[i1] += T; 
+		//tanSum[i2] += T;
+		tanSum[i0] = DirectX::XMVectorAdd(tanSum[i0], T);
+		tanSum[i1] = DirectX::XMVectorAdd(tanSum[i1], T);
+		tanSum[i2] = DirectX::XMVectorAdd(tanSum[i2], T);
+
+		/*bitanSum[i0] += B; 
+		bitanSum[i1] += B; 
+		bitanSum[i2] += B;*/
+		bitanSum[i0] = DirectX::XMVectorAdd(bitanSum[i0], B);
+		bitanSum[i1] = DirectX::XMVectorAdd(bitanSum[i1], B);
+		bitanSum[i2] = DirectX::XMVectorAdd(bitanSum[i2], B);
+	}
+
+	// 2. Vertex 단위 정규화 + Gram-Schmidt
+	for (size_t i = 0; i < vertexCount; ++i)
+	{
+		DirectX::XMFLOAT3 tmpNormal;
+		tmpNormal.x = vertices[i].normal.x;
+		tmpNormal.y = vertices[i].normal.y;
+		tmpNormal.z = vertices[i].normal.z;
+		DirectX::XMVECTOR N = XMLoadFloat3(&tmpNormal);
+		DirectX::XMVECTOR T = tanSum[i];
+		DirectX::XMVECTOR B = bitanSum[i];
+
+		// T 외적 N
+		// 정사영 제거(Gram-Schmidt 정규직교화)
+		//T = DirectX::XMVector3Normalize(T - N * DirectX::XMVector3Dot(N, T));
+		T = DirectX::XMVector3Normalize(DirectX::XMVectorSubtract(T, DirectX::XMVectorMultiply(N, DirectX::XMVector3Dot(N, T))));
+		
+		// handedness
+		float handedness = (DirectX::XMVectorGetX(DirectX::XMVector3Dot(DirectX::XMVector3Cross(N, T), B)) < 0.0f) ? -1.0f : 1.0f;
+
+		DirectX::XMFLOAT3 outT;
+		DirectX::XMStoreFloat3(&outT, T);
+		vertices[i].tangent = DirectX::XMFLOAT4(outT.x, outT.y, outT.z, handedness);
 	}
 }
 
@@ -693,8 +806,11 @@ bool FBXLoader::GetUV_v1(
 	}
 
 	FbxGeometryElementUV* element = mesh->GetElementUV(0);
-
-	if (!element) return false;
+	if (!element)
+	{
+		DEBUG_BREAK();
+		return false;
+	}
 
 	int index = 0;
 	switch (element->GetMappingMode())
@@ -742,6 +858,11 @@ bool FBXLoader::GetUV_v2(FbxVector2* outUV, FbxMesh* mesh, int polyIndex, int ve
 	}
 
 	FbxGeometryElementUV* element = mesh->GetElementUV(0);
+	if (!element)
+	{
+		DEBUG_BREAK();
+		return false;
+	}
 	const char* uvSetName = element->GetName();
 
 	bool unMapped;
@@ -769,14 +890,17 @@ bool FBXLoader::GetColor(FbxColor* outColor, FbxMesh* mesh, int cpIndex, int pol
 	switch (element->GetMappingMode())
 	{
 	case FbxGeometryElement::eByControlPoint:
+	{
 		index = cpIndex;
 		break;
-
+	}
 	case FbxGeometryElement::eByPolygonVertex:
+	{
 		index = polygonVertexIndex;
 		break;
-
+	}
 	default:
+		DEBUG_BREAK();
 		return false;
 	}
 
@@ -813,6 +937,7 @@ bool FBXLoader::GetColor(FbxColor* outColor, FbxMesh* mesh, int cpIndex, int pol
 	}
 
 	default:
+		DEBUG_BREAK();
 		return false;
 	}
 }

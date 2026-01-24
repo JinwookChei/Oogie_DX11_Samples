@@ -3,7 +3,7 @@ cbuffer ConstantBuffer : register(b0)
     matrix World;
     matrix View;
     matrix Projection;
-    
+   
     float4 lightColor;
     float4 ambientColor;
     
@@ -50,7 +50,6 @@ PS_INPUT main(VS_INPUT input)
     skinTransform += mul(input.blendWeights.z, g_BoneTransforms[(uint) input.boneIndices.z]);
     skinTransform += mul(input.blendWeights.w, g_BoneTransforms[(uint) input.boneIndices.w]);
 
-    
     float4 skinnedPos = mul(float4(input.position, 1.0f), skinTransform);
     float4 worldPos = mul(skinnedPos, World);
     float4 viewPos = mul(worldPos, View);
@@ -61,13 +60,18 @@ PS_INPUT main(VS_INPUT input)
     
     
     float3 N = normalize(mul(input.normal.xyz, (float3x3) skinTransform));
-    N = normalize(mul(N, (float3x3) World));
     float3 T = normalize(mul(input.tangent.xyz, (float3x3) skinTransform));
+
+    // World (scale 없음 가정)
+    N = normalize(mul(N, (float3x3) World));
     T = normalize(mul(T, (float3x3) World));
-    float3 B = normalize(cross(N, T) * input.tangent.w);
+
+    // Gram-Schmidt
+    T = normalize(T - N * dot(N, T));
+    float3 B = cross(N, T) * input.tangent.w;
+
     output.normal = N;
     output.TBN = float3x3(T, B, N);
-    
     return output;
 }
 

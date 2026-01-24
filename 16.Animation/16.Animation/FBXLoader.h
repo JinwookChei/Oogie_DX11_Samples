@@ -3,6 +3,7 @@
 class FBXMesh;
 class MeshData;
 class FBXAnimation;
+class SimpleVertex;
 struct VertexSkinData;
 
 struct SceneAxisInfo
@@ -96,8 +97,8 @@ public:
 
 	bool Init(const std::string& file);
 
-    // Mesh
-    bool LoadMesh(FBXMesh* pOutMesh, const std::string& file);
+    // Mesh 
+    bool LoadMesh_V1(FBXMesh* pOutMesh, const std::string& file);
     fbxsdk::FbxMesh* FindMesh(fbxsdk::FbxNode* node);
     void ExtractMeshData(MeshData* pMeshData, fbxsdk::FbxMesh* pMesh);
     void ExtractMeshColor(MeshData* pMeshData, fbxsdk::FbxMesh* pMesh);
@@ -106,9 +107,10 @@ public:
     void ExtractMeshUV(MeshData* pMeshData, fbxsdk::FbxMesh* pMesh);
 
     
-    bool Test(FBXMesh* pOutMesh, const std::string& file);
+    bool LoadMesh_V2(FBXMesh* pOutMesh, const std::string& file);
     bool GetNormal(FbxVector4* outNormal, FbxMesh* mesh, int cpIndex, int polygonVertexIndex);
-    bool GetTangent(FbxVector4* outTangent, FbxMesh* mesh, int cpIndex, int polygonVertexIndex);
+    bool GetTangent(FbxVector4* outTangent, bool* isExistTangent,FbxMesh* mesh, int cpIndex, int polygonVertexIndex);
+    void CalculateTangent(std::vector<SimpleVertex>& vertices, const std::vector<WORD>& indices);
     bool GetUV_v1(FbxVector2* outUV, FbxMesh* mesh, int cpIndex, int polygonVertexIndex);
     bool GetUV_v2(FbxVector2* outUV, FbxMesh* mesh, int polyIndex, int vertexIndex);
     bool GetColor(FbxColor* outColor, FbxMesh* mesh, int cpIndex, int polygonVertexIndex);

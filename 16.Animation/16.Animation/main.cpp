@@ -21,7 +21,6 @@ ID3D11VertexShader* g_pVertexShader = nullptr;
 ID3D11PixelShader* g_pPixelShader = nullptr;
 
 // Texture
-
 ID3D11ShaderResourceView* g_pTextureResourceView = nullptr;
 ID3D11SamplerState* g_pSamplerLinear = nullptr;
 
@@ -470,34 +469,42 @@ HRESULT LoadWhiteTexture(ID3D11ShaderResourceView** ppOutSRV, UINT color)
 
 HRESULT InitTexture()
 {
-	const wchar_t* textureFile;
-	const wchar_t* normalFile;
 	if (SELECT_MESH == 1)
 	{
-		textureFile = L"../../Resource/fbx/Mesh/JUMPER_TextureUv1.png";
-		normalFile = L"../../Resource/fbx/Mixamo/maria_normal.png";
+		const wchar_t* textureFile = L"../../Resource/fbx/Mesh/JUMPER_TextureUv1.png";
+		HRESULT hr = LoadTextureWithDirectXTex(g_pd3dDevice, textureFile, false, &g_pTextureResourceView);
+		if (FAILED(hr))
+		{
+			DEBUG_BREAK();
+			return hr;
+		}
+
+		hr = LoadWhiteTexture(&g_pNormalMapShaderResourceView, 0xFFFFFFF);
+		if (FAILED(hr))
+		{
+			DEBUG_BREAK();
+			return hr;
+		}
 	}
 	else
 	{
-		textureFile = L"../../Resource/fbx/Mixamo/maria_diffuse.png";
-		normalFile = L"../../Resource/fbx/Mixamo/maria_normal.png";
+		const wchar_t* textureFile = L"../../Resource/fbx/Mixamo/maria_diffuse.png";
+		const wchar_t* normalFile = L"../../Resource/fbx/Mixamo/maria_normal.png";
+
+		HRESULT hr = LoadTextureWithDirectXTex(g_pd3dDevice, textureFile, false, &g_pTextureResourceView);
+		if (FAILED(hr))
+		{
+			DEBUG_BREAK();
+			return hr;
+		}
+
+		hr = LoadTextureWithDirectXTex(g_pd3dDevice, normalFile, true, &g_pNormalMapShaderResourceView);
+		if (FAILED(hr))
+		{
+			DEBUG_BREAK();
+			return hr;
+		}
 	}
-
-	HRESULT hr = LoadTextureWithDirectXTex(g_pd3dDevice, textureFile, false, &g_pTextureResourceView);
-	if (FAILED(hr))
-	{
-		DEBUG_BREAK();
-		return hr;
-	}
-
-
-	hr = LoadTextureWithDirectXTex(g_pd3dDevice, normalFile, true, &g_pNormalMapShaderResourceView);
-	if (FAILED(hr))
-	{
-		DEBUG_BREAK();
-		return hr;
-	}
-
 
 	D3D11_SAMPLER_DESC samplerDesc = {};
 	samplerDesc.Filter = D3D11_FILTER_ANISOTROPIC;         // 선명하게 보여야할때 -> 16개
@@ -508,7 +515,7 @@ HRESULT InitTexture()
 	samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
 	samplerDesc.MinLOD = 0;
 	samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
-	hr = g_pd3dDevice->CreateSamplerState(&samplerDesc, &g_pSamplerLinear);
+	HRESULT hr = g_pd3dDevice->CreateSamplerState(&samplerDesc, &g_pSamplerLinear);
 	if (FAILED(hr))
 	{
 		DEBUG_BREAK();
@@ -605,7 +612,7 @@ void UpdateConstantResource(const Transform& worldTransform)
 		// Spot Light
 		lightColor = DirectX::XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 		ambientColor = DirectX::XMFLOAT4(0.3f, 0.3f, 0.3f, 0.3f);
-		spotPosition = DirectX::XMFLOAT3(-5.0f, 4.8f, 2.5f);
+		spotPosition = DirectX::XMFLOAT3(-3.0f, 3.0f, 2.5f);
 		spotDirection = DirectX::XMFLOAT3(0.0f, -1.0f, 0.0f);
 	}
 	else
@@ -628,7 +635,7 @@ void UpdateConstantResource(const Transform& worldTransform)
 
 		lightColor = DirectX::XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 		ambientColor = DirectX::XMFLOAT4(0.3f, 0.3f, 0.3f, 0.3f);
-		spotPosition = DirectX::XMFLOAT3(-8.0f, 0.0f, 7.0f);
+		spotPosition = DirectX::XMFLOAT3(-5.0f, 0.0f, 7.0f);
 		spotDirection = DirectX::XMFLOAT3(1.0f, 0.0f, 0.0f);
 	}
 
@@ -724,33 +731,30 @@ void BeginPlay()
 
 	if (SELECT_MESH == 1)
 	{
-		// 이걸로 했을때는 Light 적용이 안됨. 노말이 다른가??
-		// vertices = 23349
-		// indices = 52224
-		g_pFBXLoader->Test(g_pMesh, "..\\..\\Resource\\Fbx\\Mesh\\JUMPER_MESH.FBX");
-		g_pFBXLoader->LoadAnimation(g_pAnimation, "..\\..\\Resource\\Fbx\\Animation\\JUMPER_IDLE.FBX");
-
 		// 이걸로 했을때는 Light 적용이 됨.
 		// vertices = 23507
 		// indices = 52224
-		// g_pFBXLoader->LoadMesh(g_pMesh, "..\\..\\Resource\\Fbx\\Mesh\\JUMPER_MESH.FBX");
+		// g_pFBXLoader->LoadMesh_V1(g_pMesh, "..\\..\\Resource\\Fbx\\Mesh\\JUMPER_MESH.FBX");
 		// g_pFBXLoader->LoadAnimation(g_pAnimation, "..\\..\\Resource\\Fbx\\Animation\\JUMPER_IDLE.FBX");
-		int block = 999;
+		
+		// 이걸로 했을때는 Light 적용이 안됨. 노말이 다른가??
+		// vertices = 23349
+		// indices = 52224
+		g_pFBXLoader->LoadMesh_V2(g_pMesh, "..\\..\\Resource\\Fbx\\Mesh\\JUMPER_MESH.FBX");
+		g_pFBXLoader->LoadAnimation(g_pAnimation, "..\\..\\Resource\\Fbx\\Animation\\JUMPER_IDLE.FBX");
 	}
 	else
 	{
-		// vertices = 9584
-		// indices = 43698
-		g_pFBXLoader->Test(g_pMesh, "..\\..\\Resource\\Fbx\\Mixamo\\Capoeira.fbx");
-		g_pFBXLoader->LoadAnimation(g_pAnimation, "..\\..\\Resource\\Fbx\\Mixamo\\Capoeira.fbx");
-
-
 		// vertices = 8094
 		// indices = 43698
-		// g_pFBXLoader->LoadMesh(g_pMesh, "..\\..\\Resource\\Fbx\\Mixamo\\Capoeira.fbx");
+		// g_pFBXLoader->LoadMesh_V1(g_pMesh, "..\\..\\Resource\\Fbx\\Mixamo\\Capoeira.fbx");
 		// g_pFBXLoader->LoadAnimation(g_pAnimation, "..\\..\\Resource\\Fbx\\Mixamo\\Capoeira.fbx");
 
-		int block = 999;
+
+		// vertices = 9584
+		// indices = 43698
+		g_pFBXLoader->LoadMesh_V2(g_pMesh, "..\\..\\Resource\\Fbx\\Mixamo\\Capoeira.fbx");
+		g_pFBXLoader->LoadAnimation(g_pAnimation, "..\\..\\Resource\\Fbx\\Mixamo\\Capoeira.fbx");
 	}
 
 	InitMesh();

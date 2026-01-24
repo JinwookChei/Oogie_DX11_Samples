@@ -33,30 +33,6 @@ struct SimpleVertex
 	}
 };
 
-//struct ControlPointKey
-//{
-//	fbxsdk::FbxVector4 cpPos;
-//
-//	ControlPointKey(fbxsdk::FbxVector4 _cpPos)
-//	{
-//		cpPos = _cpPos;
-//	}
-//
-//	ControlPointKey& operator=(const fbxsdk::FbxVector4& other)
-//	{
-//		cpPos = other;
-//		return *this;
-//	}
-//
-//	bool operator==(const ControlPointKey& other) const
-//	{
-//		return cpPos[0] == other.cpPos[0]
-//			&& cpPos[1] == other.cpPos[1]
-//			&& cpPos[2] == other.cpPos[2]
-//			&& cpPos[3] == other.cpPos[3];
-//	}
-//};
-
 inline void HashCombine(size_t& seed, size_t value)
 {
 	seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
@@ -97,19 +73,6 @@ struct std::hash<SimpleVertex>
 	}
 };
 
-//template<>
-//struct std::hash<ControlPointKey>
-//{
-//	size_t operator()(const ControlPointKey& key) const noexcept
-//	{
-//		size_t seed = 0;
-//		HashCombine(seed, HashFloat(key.cpPos[0]));
-//		HashCombine(seed, HashFloat(key.cpPos[1]));
-//		HashCombine(seed, HashFloat(key.cpPos[2]));
-//		HashCombine(seed, HashFloat(key.cpPos[3]));
-//		return seed;
-//	}
-//};
 
 struct Bone
 {
