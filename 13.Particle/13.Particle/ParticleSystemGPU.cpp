@@ -302,7 +302,7 @@ bool ParticleSystemGPU::InitBlendState(ID3D11Device* pDevice)
 	rt0.DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
 	rt0.BlendOp = D3D11_BLEND_OP_ADD;
 	rt0.SrcBlendAlpha = D3D11_BLEND_ONE;
-	rt0.DestBlendAlpha = D3D11_BLEND_ZERO;
+	rt0.DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
 	rt0.BlendOpAlpha = D3D11_BLEND_OP_ADD;
 	rt0.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 

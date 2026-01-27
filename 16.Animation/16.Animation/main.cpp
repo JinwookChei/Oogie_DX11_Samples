@@ -3,7 +3,7 @@
 #define ResolutionWidth 2560.0f
 #define	ResolutionHeigh 1440.0f
 
-constexpr int SELECT_MESH = 2;
+constexpr int SELECT_MESH = 1;
 
 
 // Init

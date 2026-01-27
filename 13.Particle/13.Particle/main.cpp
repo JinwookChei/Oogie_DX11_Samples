@@ -18,6 +18,7 @@ ID3D11Device* g_pd3dDevice = nullptr;
 ID3D11DeviceContext* g_pImmediateContext = nullptr; // Device Context
 IDXGISwapChain* g_pSwapChain = nullptr; // 스왑 체인
 ID3D11RenderTargetView* g_pRenderTargetView = nullptr; // 렌더 타켓 뷰
+
 ID3D11DepthStencilView* g_pDepthStencilView = nullptr; // 깊이 스텐실 뷰
 ID3D11DepthStencilState* g_pDepthStencilState = nullptr;
 
@@ -240,11 +241,12 @@ HRESULT InitD3D(HWND hWnd)
 		return S_FALSE;
 	}
 
-	if (FAILED(InitDepthStencilBuffer()))
-	{
-		DEBUG_BREAK();
-		return S_FALSE;
-	}
+	//if (FAILED(InitDepthStencilBuffer()))
+	//{
+	//	DEBUG_BREAK();
+	//	return S_FALSE;
+	//}
+
 	if (FAILED(SetViewPort()))
 	{
 		DEBUG_BREAK();
@@ -400,6 +402,7 @@ void BeginPlay()
 	g_pParticleTexSRV = CreateWhiteTextureSRV(g_pd3dDevice);
 	const int maxParticleNum = 10000;
 
+
 #if USE_GPU_PARTICLES
 	g_pParticleSystemGPU = new ParticleSystemGPU;
 	g_pParticleSystemGPU->gGpuPatternMode_ = GPU_PARTICLE_PATTERN_MODE;
@@ -450,7 +453,7 @@ void Tick()
 
 void RenderBegin()
 {
-	float clearColor[4] = { 0.0f, 0.2f, 0.4f, 1.0f };
+	float clearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
 	g_pImmediateContext->ClearRenderTargetView(g_pRenderTargetView, clearColor);
 	g_pImmediateContext->ClearDepthStencilView(g_pDepthStencilView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 }
